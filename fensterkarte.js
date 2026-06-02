@@ -48,6 +48,7 @@ class FensterkarteCard extends HTMLElement {
       humidity_warning_threshold: 65,
       humidity_border_color: 'red',
       humidity_border_opacity: 1,
+      pulse_enabled: false,
     };
   }
 
@@ -55,7 +56,6 @@ class FensterkarteCard extends HTMLElement {
     if (!config || !config.entity) {
       throw new Error('Fensterkarte benötigt mindestens die Konfiguration `entity`');
     }
-
     const defaults = FensterkarteCard.getStubConfig();
     this._config = { ...defaults, ...config };
   }
@@ -70,8 +70,7 @@ class FensterkarteCard extends HTMLElement {
   }
 
   render() {
-    if (!this.shadowRoot) return;
-    if (!this._config) return;
+    if (!this.shadowRoot || !this._config) return;
 
     const root = document.createElement('div');
     root.className = 'fensterkarte-root';
@@ -102,7 +101,6 @@ class FensterkarteCard extends HTMLElement {
     const wrapper = document.createElement('div');
     wrapper.className = 'fensterkarte-wrapper';
     wrapper.style.border = `2px solid ${border.color}`;
-    wrapper.style.opacity = border.opacity;
     wrapper.style.borderRadius = '14px';
     wrapper.style.background = 'var(--card-background-color, rgba(255,255,255,0.9))';
     wrapper.style.boxShadow = 'var(--ha-card-box-shadow, none)';
@@ -111,6 +109,11 @@ class FensterkarteCard extends HTMLElement {
     wrapper.style.alignItems = 'center';
     wrapper.style.gap = '12px';
     wrapper.style.flexDirection = this._getFlexDirection();
+
+    if (border.pulse) {
+      wrapper.style.setProperty('--fk-border-color', border.color);
+      wrapper.classList.add('fensterkarte-pulse');
+    }
 
     const icon = document.createElement('ha-icon');
     icon.setAttribute('icon', iconName);
@@ -176,14 +179,12 @@ class FensterkarteCard extends HTMLElement {
       if (this._config.icon_position === 'bottom') {
         wrapper.style.flexDirection = 'column-reverse';
       }
+    } else if (this._config.icon_position === 'left') {
+      wrapper.appendChild(icon);
+      wrapper.appendChild(content);
     } else {
-      if (this._config.icon_position === 'left') {
-        wrapper.appendChild(icon);
-        wrapper.appendChild(content);
-      } else {
-        wrapper.appendChild(content);
-        wrapper.appendChild(icon);
-      }
+      wrapper.appendChild(content);
+      wrapper.appendChild(icon);
     }
 
     root.appendChild(wrapper);
@@ -201,6 +202,13 @@ class FensterkarteCard extends HTMLElement {
       ha-icon {
         color: var(--paper-item-icon-color, #3F51B5);
       }
+      @keyframes fensterkarte-pulse {
+        0%, 100% { border-color: var(--fk-border-color); }
+        50% { border-color: transparent; }
+      }
+      .fensterkarte-pulse {
+        animation: fensterkarte-pulse 1.5s ease-in-out infinite;
+      }
     `;
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(child);
@@ -208,7 +216,7 @@ class FensterkarteCard extends HTMLElement {
 
   _isOpen(state) {
     const normalized = String(state).toLowerCase();
-    return ['open', 'on', 'true', 'opened', 'openable'].includes(normalized);
+    return ['open', 'on', 'true', 'opened'].includes(normalized);
   }
 
   _formatState(state) {
@@ -219,14 +227,60 @@ class FensterkarteCard extends HTMLElement {
   }
 
   _getFlexDirection() {
-    if (this._config.icon_position === 'top') return 'column';
-    if (this._config.icon_position === 'bottom') return 'column';
+    if (this._config.icon_position === 'top' || this._config.icon_position === 'bottom') return 'column';
     return 'row';
   }
 
   _getTextDirection() {
     if (this._config.name_position === 'top' || this._config.name_position === 'bottom') return 'column';
     return 'row';
+  }
+
+  _colorToRgb(color) {
+    const named = {
+      green:  [0, 128, 0],
+      yellow: [255, 255, 0],
+      orange: [255, 165, 0],
+      red:    [255, 0, 0],
+      blue:   [0, 0, 255],
+      purple: [128, 0, 128],
+      brown:  [165, 42, 42],
+      black:  [0, 0, 0],
+      white:  [255, 255, 255],
+    };
+    if (named[color]) return named[color];
+    if (typeof color === 'string' && color.startsWith('#')) {
+      const hex = color.slice(1);
+      if (hex.length === 3) {
+        return [
+          parseInt(hex[0] + hex[0], 16),
+          parseInt(hex[1] + hex[1], 16),
+          parseInt(hex[2] + hex[2], 16),
+        ];
+      }
+      if (hex.length === 6) {
+        return [
+          parseInt(hex.slice(0, 2), 16),
+          parseInt(hex.slice(2, 4), 16),
+          parseInt(hex.slice(4, 6), 16),
+        ];
+      }
+    }
+    return null;
+  }
+
+  _applyOpacity(color, opacity) {
+    if (opacity >= 1) return color;
+    const rgb = this._colorToRgb(color);
+    if (!rgb) return color;
+    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${opacity})`;
+  }
+
+  _mixColors(color1, color2) {
+    const rgb1 = this._colorToRgb(color1);
+    const rgb2 = this._colorToRgb(color2);
+    if (!rgb1 || !rgb2) return color1;
+    return `rgb(${Math.round((rgb1[0] + rgb2[0]) / 2)}, ${Math.round((rgb1[1] + rgb2[1]) / 2)}, ${Math.round((rgb1[2] + rgb2[2]) / 2)})`;
   }
 
   _buildDurationInfo(entity, isOpen) {
@@ -250,7 +304,7 @@ class FensterkarteCard extends HTMLElement {
     info.label = `Offen seit ${formatted}`;
     info.active = threshold > 0 && duration >= threshold && this._isTemperatureConditionMet();
     if (info.active) {
-      info.label += ` (Warnung aktiviert)`;
+      info.label += ' (Warnung aktiviert)';
     }
     info.duration = duration;
     return info;
@@ -263,10 +317,9 @@ class FensterkarteCard extends HTMLElement {
 
     const temp = Number(tempState.state);
     const threshold = Number(this._config.temperature_threshold);
-    if (this._config.temperature_threshold_mode === 'above') {
-      return temp >= threshold;
-    }
-    return temp <= threshold;
+    return this._config.temperature_threshold_mode === 'above'
+      ? temp >= threshold
+      : temp <= threshold;
   }
 
   _buildHumidityInfo() {
@@ -287,39 +340,59 @@ class FensterkarteCard extends HTMLElement {
   }
 
   _computeBorder(isOpen, durationInfo, humidityInfo) {
-    const opacity = Number(this._config.border_opacity) || 1;
-    let color = this._config.border_color || 'var(--divider-color, #a0a0a0)';
+    const baseOpacity = Number(this._config.border_opacity) || 1;
+    const humidityActive = humidityInfo.active;
+    const durationActive = durationInfo.active;
 
-    if (humidityInfo.active) {
-      color = this._config.humidity_border_color || 'red';
-      return { color, opacity: Number(this._config.humidity_border_opacity) || opacity };
+    if (humidityActive && durationActive) {
+      const humColor = this._config.humidity_border_color || 'red';
+      const durColor = this._config.duration_border_color || 'orange';
+      const mixedOpacity = (
+        (Number(this._config.humidity_border_opacity) || 1) +
+        (Number(this._config.duration_border_opacity) || 1)
+      ) / 2;
+      return {
+        color: this._applyOpacity(this._mixColors(humColor, durColor), mixedOpacity),
+        pulse: !!this._config.pulse_enabled,
+      };
     }
 
-    if (durationInfo.active) {
-      color = this._config.duration_border_color || 'orange';
-      return { color, opacity: Number(this._config.duration_border_opacity) || opacity };
+    if (humidityActive) {
+      return {
+        color: this._applyOpacity(
+          this._config.humidity_border_color || 'red',
+          Number(this._config.humidity_border_opacity) || baseOpacity
+        ),
+        pulse: !!this._config.pulse_enabled,
+      };
     }
 
+    if (durationActive) {
+      return {
+        color: this._applyOpacity(
+          this._config.duration_border_color || 'orange',
+          Number(this._config.duration_border_opacity) || baseOpacity
+        ),
+        pulse: !!this._config.pulse_enabled,
+      };
+    }
+
+    let baseColor = this._config.border_color || 'var(--divider-color, #a0a0a0)';
     if (this._config.border_color_entity) {
       const borderEntity = this._hass.states[this._config.border_color_entity];
       if (borderEntity && borderEntity.state) {
-        color = borderEntity.state;
+        baseColor = borderEntity.state;
       }
     }
-
-    return { color, opacity };
+    return { color: this._applyOpacity(baseColor, baseOpacity), pulse: false };
   }
 
   _formatDuration(seconds) {
     const minutes = Math.floor(seconds / 60);
     const hours = Math.floor(minutes / 60);
     const remainingMinutes = minutes % 60;
-    if (hours > 0) {
-      return `${hours}h ${remainingMinutes}m`;
-    }
-    if (minutes > 0) {
-      return `${minutes}m ${seconds % 60}s`;
-    }
+    if (hours > 0) return `${hours}h ${remainingMinutes}m`;
+    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
     return `${seconds}s`;
   }
 }
