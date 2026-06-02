@@ -538,12 +538,9 @@ class FensterkarteCardEditor extends HTMLElement {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...FensterkarteCard.getStubConfig(), ...config };
-    // Suppress the echo HA sends after our own config-changed dispatch —
-    // that echo must not trigger a re-render (would lose text input focus)
+    console.log('[FK editor] set config — entity:', this._config.entity, 'show_icon:', this._config.show_icon, 'suppress:', !!this._suppressConfigUpdate, 'hass:', !!this._hass);
     if (this._suppressConfigUpdate) return;
     if (!this._hass) return;
-    // Always do a full re-render so ha-form reliably picks up new values.
-    // Preserve which panels are open; default to opening 'Darstellung' on first render.
     const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
     this._render(open);
   }
@@ -578,6 +575,8 @@ class FensterkarteCardEditor extends HTMLElement {
       .panel-content { padding: 0 8px 8px; }
       .test-row { padding: 4px 8px 8px; }
     </style>`;
+
+    console.log('[FK editor] _render — config entity:', this._config.entity, 'show_icon:', this._config.show_icon, 'border_radius:', this._config.border_radius);
 
     const cfg = this._config;
     const sl = (min, max, step) => ({ number: { min, max, step, mode: 'slider' } });
@@ -723,6 +722,14 @@ class FensterkarteCardEditor extends HTMLElement {
       );
     }
     this._addSection('Feuchtigkeitswarnung', open, feuchSchema, 'humidity');
+
+    // Belt-and-suspenders: re-push correct data after ha-form's first Lit render,
+    // in case ha-form normalises / resets values during initialisation.
+    requestAnimationFrame(() => {
+      const data = this._getFormData();
+      console.log('[FK editor] rAF push — show_icon:', data.show_icon, 'entity:', data.entity, 'border_radius:', data.border_radius);
+      for (const { form } of this._forms) form.data = { ...data };
+    });
   }
 
   _addSection(title, openSet, schema, testWarning = null) {
