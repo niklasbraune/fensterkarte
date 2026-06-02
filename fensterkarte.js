@@ -458,9 +458,12 @@ class FensterkarteCardEditor extends HTMLElement {
 
     form.addEventListener('value-changed', (event) => {
       const { type, ...storedFormData } = this._config;
-      const cardType = type || this._cardType;
+      const cardType = type || this._cardType || 'custom:fensterkarte-card';
+      // Start with all defaults so no field is ever lost, even if ha-form
+      // only emits the changed field or this._config is not yet fully set.
       const newConfig = {
-        ...(cardType ? { type: cardType } : {}),
+        type: cardType,
+        ...FensterkarteCard.getStubConfig(),
         ...storedFormData,
         ...event.detail.value,
       };

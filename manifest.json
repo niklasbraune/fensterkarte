@@ -1,6 +1,6 @@
 {
   "name": "Fensterkarte",
-  "version": "0.5.5",
+  "version": "0.5.6",
   "slug": "fensterkarte",
   "description": "Fensterkarte für Home Assistant Lovelace zur Anzeige des Fensterstatus mit flexiblen Warnfarben.",
   "documentation": "https://github.com/niklasbraune/fensterkarte",
