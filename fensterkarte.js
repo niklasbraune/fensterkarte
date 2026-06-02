@@ -33,7 +33,6 @@ class FensterkarteCard extends HTMLElement {
       name_position: 'right',
       name_size: 14,
       show_state: true,
-      card_height: 0,
       tap_action: { action: 'more-info' },
       border_color: [0, 128, 0],
       border_color_open: [255, 200, 0],
@@ -73,7 +72,9 @@ class FensterkarteCard extends HTMLElement {
     this.render();
   }
 
-  get cardSize() { return 1; }
+  get cardSize() {
+    return Number(this._config.grid_options?.rows) || 1;
+  }
 
   render() {
     if (!this.shadowRoot || !this._config) return;
@@ -108,7 +109,6 @@ class FensterkarteCard extends HTMLElement {
 
     const isCentered = this._config.icon_position === 'center';
     const iconSize = Number(this._config.icon_size) || 36;
-    const cardHeight = Number(this._config.card_height) || 0;
 
     // ── Outer border shell (gradient or solid) ───────────────────────────
     const borderEl = document.createElement('div');
@@ -117,7 +117,6 @@ class FensterkarteCard extends HTMLElement {
     borderEl.style.padding = '2px';
     borderEl.style.background = this._buildGradient(border.colors);
     borderEl.style.boxSizing = 'border-box';
-    if (cardHeight > 0) borderEl.style.minHeight = `${cardHeight}px`;
 
     const blurPx = border.blur;
     const primaryColor = border.colors[0];
@@ -145,12 +144,16 @@ class FensterkarteCard extends HTMLElement {
     wrapper.style.height = '100%';
     wrapper.style.boxSizing = 'border-box';
 
+    const flexDir = this._getFlexDirection();
+    wrapper.style.flexDirection = flexDir;
+    // Center content vertically when the card has extra height (grid rows > 1)
+    // For column layouts (icon top/bottom/center) this prevents content hugging the top
     if (isCentered) {
-      wrapper.style.flexDirection = 'column';
       wrapper.style.justifyContent = 'center';
       wrapper.style.alignItems = 'center';
-    } else {
-      wrapper.style.flexDirection = this._getFlexDirection();
+    } else if (flexDir === 'column') {
+      wrapper.style.justifyContent = 'space-evenly';
+      wrapper.style.alignItems = 'center';
     }
 
     const tapAction = this._config.tap_action?.action;
@@ -543,7 +546,6 @@ class FensterkarteCardEditor extends HTMLElement {
     this._addSection('Darstellung', [
       { name: 'entity', label: 'Entität', required: true, selector: { entity: {} } },
       { name: 'name', label: 'Anzeigename', selector: { text: {} } },
-      { name: 'card_height', label: 'Kartenhöhe px (0 = auto)', selector: sl(0, 400, 4) },
       { name: 'show_icon', label: 'Icon anzeigen', selector: { boolean: {} } },
       { name: 'icon_position', label: 'Icon Position', selector: { select: { options: positions } } },
       { name: 'icon_size', label: 'Icon Größe (px)', selector: sl(16, 128, 2) },
