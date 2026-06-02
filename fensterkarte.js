@@ -35,8 +35,9 @@ class FensterkarteCard extends HTMLElement {
       border_opacity: 1,
       border_blur: 4,
       border_closed_enabled: true,
+      card_height: 0,
       duration_enabled: false,
-      duration_threshold: 600,
+      duration_threshold: '00:10:00',
       duration_entity: '',
       duration_border_color: 'orange',
       duration_border_opacity: 1,
@@ -44,12 +45,15 @@ class FensterkarteCard extends HTMLElement {
       temperature_entity: '',
       temperature_threshold: 18,
       temperature_threshold_mode: 'below',
+      temperature_unit: 'celsius',
       humidity_warning_enabled: false,
       humidity_entity: '',
       humidity_warning_threshold: 65,
       humidity_border_color: 'red',
       humidity_border_opacity: 1,
+      preview_warning: false,
       pulse_enabled: false,
+      pulse_interval: 1.5,
     };
   }
 
@@ -81,8 +85,10 @@ class FensterkarteCard extends HTMLElement {
     }
 
     const entity = this._hass.states[this._config.entity];
-    if (!entity) {
-      root.textContent = `Entität ${this._config.entity} nicht gefunden`;
+    if (!this._config.entity || !entity) {
+      root.textContent = this._config.entity
+        ? `Entität ${this._config.entity} nicht gefunden`
+        : 'Keine Entität konfiguriert';
       this._renderRoot(root);
       return;
     }
@@ -97,93 +103,124 @@ class FensterkarteCard extends HTMLElement {
     const humidityInfo = this._buildHumidityInfo();
     const border = this._computeBorder(isOpen, durationInfo, humidityInfo);
 
+    const isCentered = this._config.icon_position === 'center';
+    const iconSize = Number(this._config.icon_size) || 36;
+    const cardHeight = Number(this._config.card_height) || 0;
+
+    // Wrapper
     const wrapper = document.createElement('div');
     wrapper.className = 'fensterkarte-wrapper';
     wrapper.style.border = `2px solid ${border.color}`;
     wrapper.style.borderRadius = '14px';
     wrapper.style.background = 'var(--card-background-color, rgba(255,255,255,0.9))';
     wrapper.style.padding = '14px';
-
-    const blurPx = border.blur;
-    if (blurPx > 0 && border.color !== 'transparent') {
-      wrapper.style.boxShadow = `0 0 ${blurPx}px ${Math.ceil(blurPx / 2)}px ${border.color}`;
-    } else {
-      wrapper.style.boxShadow = 'var(--ha-card-box-shadow, none)';
-    }
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
-    wrapper.style.gap = '12px';
-    wrapper.style.flexDirection = this._getFlexDirection();
+    wrapper.style.gap = '10px';
+    wrapper.style.boxSizing = 'border-box';
+    if (cardHeight > 0) wrapper.style.minHeight = `${cardHeight}px`;
+
+    if (isCentered) {
+      wrapper.style.flexDirection = 'column';
+      wrapper.style.justifyContent = 'center';
+      wrapper.style.alignItems = 'center';
+    } else {
+      wrapper.style.flexDirection = this._getFlexDirection();
+    }
+
+    // Box-shadow glow
+    const blurPx = border.blur;
+    const glowShadow = blurPx > 0 && border.color !== 'transparent'
+      ? `0 0 ${blurPx}px ${Math.ceil(blurPx / 2)}px ${border.color}`
+      : 'var(--ha-card-box-shadow, none)';
 
     if (border.pulse) {
       wrapper.style.setProperty('--fk-border-color', border.color);
+      wrapper.style.setProperty('--fk-box-shadow-peak', glowShadow);
+      wrapper.style.setProperty('--fk-pulse-duration', `${Number(this._config.pulse_interval) || 1.5}s`);
       wrapper.classList.add('fensterkarte-pulse');
+    } else {
+      wrapper.style.boxShadow = glowShadow;
     }
 
+    // Icon
     const icon = document.createElement('ha-icon');
     icon.setAttribute('icon', iconName);
-    icon.style.width = `${this._config.icon_size}px`;
-    icon.style.height = `${this._config.icon_size}px`;
-    icon.style.lineHeight = `${this._config.icon_size}px`;
-    icon.style.fontSize = `${this._config.icon_size}px`;
-    icon.style.display = this._config.show_icon ? 'block' : 'none';
+    icon.style.setProperty('--mdc-icon-size', `${iconSize}px`);
+    icon.style.width = `${iconSize}px`;
+    icon.style.height = `${iconSize}px`;
+    icon.style.flexShrink = '0';
+    icon.style.display = this._config.show_icon ? 'flex' : 'none';
+    if (isCentered) {
+      icon.style.justifyContent = 'center';
+      icon.style.alignItems = 'center';
+    }
 
+    // Content
+    const isNameCenter = this._config.name_position === 'center' || isCentered;
     const content = document.createElement('div');
     content.style.display = 'flex';
-    content.style.flexDirection = this._getTextDirection();
-    content.style.flex = '1';
-    content.style.gap = '6px';
+    content.style.flexDirection = isCentered ? 'column' : this._getTextDirection();
+    content.style.flex = isCentered ? 'none' : '1';
+    content.style.gap = '4px';
+    content.style.minWidth = '0';
+    if (isNameCenter) {
+      content.style.textAlign = 'center';
+      content.style.alignItems = 'center';
+      content.style.width = '100%';
+    }
 
     const nameEl = document.createElement('div');
-    nameEl.className = 'fensterkarte-name';
     nameEl.textContent = label;
     nameEl.style.fontSize = `${this._config.name_size}px`;
     nameEl.style.fontWeight = '600';
+    nameEl.style.overflow = 'hidden';
+    nameEl.style.textOverflow = 'ellipsis';
+    nameEl.style.whiteSpace = 'nowrap';
     nameEl.style.display = this._config.show_name ? 'block' : 'none';
 
     const stateEl = document.createElement('div');
-    stateEl.className = 'fensterkarte-state';
     stateEl.textContent = displayState;
-    stateEl.style.opacity = '0.9';
-    stateEl.style.fontSize = '0.95rem';
+    stateEl.style.opacity = '0.85';
+    stateEl.style.fontSize = '0.9em';
     stateEl.style.display = this._config.show_state ? 'block' : 'none';
 
     const extra = document.createElement('div');
-    extra.className = 'fensterkarte-extra';
     extra.style.display = 'flex';
     extra.style.flexDirection = 'column';
-    extra.style.gap = '4px';
-    extra.style.fontSize = '0.88rem';
-    extra.style.opacity = '0.88';
+    extra.style.gap = '3px';
+    extra.style.fontSize = '0.82em';
+    extra.style.opacity = '0.82';
 
     if (durationInfo.label) {
-      const durationLine = document.createElement('div');
-      durationLine.textContent = durationInfo.label;
-      extra.appendChild(durationLine);
+      const dl = document.createElement('div');
+      dl.textContent = durationInfo.label;
+      extra.appendChild(dl);
     }
-
     if (humidityInfo.label) {
-      const humidityLine = document.createElement('div');
-      humidityLine.textContent = humidityInfo.label;
-      extra.appendChild(humidityLine);
+      const hl = document.createElement('div');
+      hl.textContent = humidityInfo.label;
+      extra.appendChild(hl);
     }
 
-    if (this._config.show_name && this._config.name_position === 'top') {
+    // Name above state when centered or name_position=top
+    if (isCentered || this._config.name_position === 'top') {
       content.appendChild(nameEl);
       content.appendChild(stateEl);
     } else {
       content.appendChild(stateEl);
       content.appendChild(nameEl);
     }
-
     content.appendChild(extra);
 
-    if (this._config.icon_position === 'top' || this._config.icon_position === 'bottom') {
+    // Assemble
+    if (isCentered || this._config.icon_position === 'top') {
       wrapper.appendChild(icon);
       wrapper.appendChild(content);
-      if (this._config.icon_position === 'bottom') {
-        wrapper.style.flexDirection = 'column-reverse';
-      }
+    } else if (this._config.icon_position === 'bottom') {
+      wrapper.style.flexDirection = 'column-reverse';
+      wrapper.appendChild(icon);
+      wrapper.appendChild(content);
     } else if (this._config.icon_position === 'left') {
       wrapper.appendChild(icon);
       wrapper.appendChild(content);
@@ -200,19 +237,23 @@ class FensterkarteCard extends HTMLElement {
     this.shadowRoot.innerHTML = '';
     const style = document.createElement('style');
     style.textContent = `
+      :host { display: block; height: 100%; }
       .fensterkarte-root {
         font-family: var(--ha-card-font-family, inherit);
         color: var(--primary-text-color, #000);
+        height: 100%;
       }
-      ha-icon {
-        color: var(--paper-item-icon-color, #3F51B5);
-      }
+      .fensterkarte-wrapper { height: 100%; box-sizing: border-box; }
+      ha-icon { color: var(--paper-item-icon-color, #3F51B5); }
       @keyframes fensterkarte-pulse {
-        0%, 100% { border-color: var(--fk-border-color); }
-        50% { border-color: transparent; }
+        0%, 100% {
+          border-color: var(--fk-border-color);
+          box-shadow: var(--fk-box-shadow-peak, none);
+        }
+        50% { border-color: transparent; box-shadow: none; }
       }
       .fensterkarte-pulse {
-        animation: fensterkarte-pulse 1.5s ease-in-out infinite;
+        animation: fensterkarte-pulse var(--fk-pulse-duration, 1.5s) ease-in-out infinite;
       }
     `;
     this.shadowRoot.appendChild(style);
@@ -220,56 +261,39 @@ class FensterkarteCard extends HTMLElement {
   }
 
   _isOpen(state) {
-    const normalized = String(state).toLowerCase();
-    return ['open', 'on', 'true', 'opened'].includes(normalized);
+    return ['open', 'on', 'true', 'opened'].includes(String(state).toLowerCase());
   }
 
   _formatState(state) {
-    const normalized = String(state).toLowerCase();
-    if (['open', 'opened', 'on', 'true'].includes(normalized)) return 'Geöffnet';
-    if (['closed', 'off', 'false'].includes(normalized)) return 'Geschlossen';
+    const n = String(state).toLowerCase();
+    if (['open', 'opened', 'on', 'true'].includes(n)) return 'Geöffnet';
+    if (['closed', 'off', 'false'].includes(n)) return 'Geschlossen';
     return state;
   }
 
   _getFlexDirection() {
-    if (this._config.icon_position === 'top' || this._config.icon_position === 'bottom') return 'column';
+    const pos = this._config.icon_position;
+    if (pos === 'top' || pos === 'bottom' || pos === 'center') return 'column';
     return 'row';
   }
 
   _getTextDirection() {
-    if (this._config.name_position === 'top' || this._config.name_position === 'bottom') return 'column';
-    return 'row';
+    return this._config.name_position === 'top' ? 'column' : 'row';
   }
 
   _colorToRgb(color) {
     const named = {
-      green:  [0, 128, 0],
-      yellow: [255, 255, 0],
-      orange: [255, 165, 0],
-      red:    [255, 0, 0],
-      blue:   [0, 0, 255],
-      purple: [128, 0, 128],
-      brown:  [165, 42, 42],
-      black:  [0, 0, 0],
-      white:  [255, 255, 255],
+      green: [0,128,0], yellow: [255,255,0], orange: [255,165,0],
+      red: [255,0,0], blue: [0,0,255], purple: [128,0,128],
+      brown: [165,42,42], black: [0,0,0], white: [255,255,255],
     };
     if (named[color]) return named[color];
     if (typeof color === 'string' && color.startsWith('#')) {
       const hex = color.slice(1);
-      if (hex.length === 3) {
-        return [
-          parseInt(hex[0] + hex[0], 16),
-          parseInt(hex[1] + hex[1], 16),
-          parseInt(hex[2] + hex[2], 16),
-        ];
-      }
-      if (hex.length === 6) {
-        return [
-          parseInt(hex.slice(0, 2), 16),
-          parseInt(hex.slice(2, 4), 16),
-          parseInt(hex.slice(4, 6), 16),
-        ];
-      }
+      if (hex.length === 3)
+        return [parseInt(hex[0]+hex[0],16), parseInt(hex[1]+hex[1],16), parseInt(hex[2]+hex[2],16)];
+      if (hex.length === 6)
+        return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
     }
     return null;
   }
@@ -278,14 +302,25 @@ class FensterkarteCard extends HTMLElement {
     if (opacity >= 1) return color;
     const rgb = this._colorToRgb(color);
     if (!rgb) return color;
-    return `rgba(${rgb[0]}, ${rgb[1]}, ${rgb[2]}, ${opacity})`;
+    return `rgba(${rgb[0]},${rgb[1]},${rgb[2]},${opacity})`;
   }
 
-  _mixColors(color1, color2) {
-    const rgb1 = this._colorToRgb(color1);
-    const rgb2 = this._colorToRgb(color2);
-    if (!rgb1 || !rgb2) return color1;
-    return `rgb(${Math.round((rgb1[0] + rgb2[0]) / 2)}, ${Math.round((rgb1[1] + rgb2[1]) / 2)}, ${Math.round((rgb1[2] + rgb2[2]) / 2)})`;
+  _mixColors(c1, c2) {
+    const r1 = this._colorToRgb(c1), r2 = this._colorToRgb(c2);
+    if (!r1 || !r2) return c1;
+    return `rgb(${Math.round((r1[0]+r2[0])/2)},${Math.round((r1[1]+r2[1])/2)},${Math.round((r1[2]+r2[2])/2)})`;
+  }
+
+  _parseThreshold(value) {
+    if (!value && value !== 0) return 0;
+    if (typeof value === 'number') return value;
+    const s = String(value).trim();
+    if (s.includes(':')) {
+      const p = s.split(':').map(n => parseInt(n, 10) || 0);
+      if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
+      if (p.length === 2) return p[0] * 60 + p[1];
+    }
+    return parseInt(s, 10) || 0;
   }
 
   _buildDurationInfo(entity, isOpen) {
@@ -294,52 +329,45 @@ class FensterkarteCard extends HTMLElement {
 
     let duration = 0;
     if (this._config.duration_entity) {
-      const durationState = this._hass.states[this._config.duration_entity];
-      if (durationState && !isNaN(Number(durationState.state))) {
-        duration = Number(durationState.state);
-      }
+      const ds = this._hass.states[this._config.duration_entity];
+      if (ds && !isNaN(Number(ds.state))) duration = Number(ds.state);
     }
-
-    if (!duration && entity && entity.last_changed) {
+    if (!duration && entity?.last_changed)
       duration = Math.floor((new Date() - new Date(entity.last_changed)) / 1000);
-    }
 
-    const threshold = Number(this._config.duration_threshold) || 0;
-    const formatted = this._formatDuration(duration);
-    info.label = `Offen seit ${formatted}`;
+    const threshold = this._parseThreshold(this._config.duration_threshold);
+    info.label = `Offen seit ${this._formatDuration(duration)}`;
     info.active = threshold > 0 && duration >= threshold && this._isTemperatureConditionMet();
-    if (info.active) {
-      info.label += ' (Warnung aktiviert)';
-    }
+    if (info.active) info.label += ' (Warnung)';
     info.duration = duration;
     return info;
   }
 
   _isTemperatureConditionMet() {
     if (!this._config.temperature_warning_enabled || !this._config.temperature_entity) return true;
-    const tempState = this._hass.states[this._config.temperature_entity];
-    if (!tempState || isNaN(Number(tempState.state))) return true;
-
-    const temp = Number(tempState.state);
-    const threshold = Number(this._config.temperature_threshold);
-    return this._config.temperature_threshold_mode === 'above'
-      ? temp >= threshold
-      : temp <= threshold;
+    const ts = this._hass.states[this._config.temperature_entity];
+    if (!ts || isNaN(Number(ts.state))) return true;
+    let temp = Number(ts.state);
+    let threshold = Number(this._config.temperature_threshold);
+    // If user configured in °F, convert sensor reading from °C to °F for comparison
+    if (this._config.temperature_unit === 'fahrenheit') {
+      temp = temp * 9 / 5 + 32;
+    }
+    return this._config.temperature_threshold_mode === 'above' ? temp >= threshold : temp <= threshold;
   }
 
   _buildHumidityInfo() {
     const info = { label: '', active: false };
     if (!this._config.humidity_warning_enabled || !this._config.humidity_entity) return info;
-
-    const humidityState = this._hass.states[this._config.humidity_entity];
-    if (!humidityState || isNaN(Number(humidityState.state))) return info;
-    const humidity = Number(humidityState.state);
+    const hs = this._hass.states[this._config.humidity_entity];
+    if (!hs || isNaN(Number(hs.state))) return info;
+    const humidity = Number(hs.state);
     const threshold = Number(this._config.humidity_warning_threshold) || 0;
     if (humidity >= threshold) {
       info.active = true;
-      info.label = `Feuchtigkeit ${humidity}% (Schwelle: ${threshold}%)`;
+      info.label = `${humidity}% RF (Schwelle: ${threshold}%)`;
     } else {
-      info.label = `Feuchtigkeit ${humidity}%`;
+      info.label = `${humidity}% RF`;
     }
     return info;
   }
@@ -347,67 +375,58 @@ class FensterkarteCard extends HTMLElement {
   _computeBorder(isOpen, durationInfo, humidityInfo) {
     const baseOpacity = Number(this._config.border_opacity) || 1;
     const blur = Number(this._config.border_blur) || 0;
-    const humidityActive = humidityInfo.active;
-    const durationActive = durationInfo.active;
+    const pulse = !!this._config.pulse_enabled;
 
-    if (humidityActive && durationActive) {
-      const humColor = this._config.humidity_border_color || 'red';
-      const durColor = this._config.duration_border_color || 'orange';
-      const mixedOpacity = (
-        (Number(this._config.humidity_border_opacity) || 1) +
-        (Number(this._config.duration_border_opacity) || 1)
-      ) / 2;
-      return {
-        color: this._applyOpacity(this._mixColors(humColor, durColor), mixedOpacity),
-        pulse: !!this._config.pulse_enabled,
-        blur,
-      };
+    // Preview mode — force a warning look for configuration
+    if (this._config.preview_warning) {
+      const col = this._config.humidity_warning_enabled
+        ? this._applyOpacity(this._config.humidity_border_color || 'red',
+            Number(this._config.humidity_border_opacity) || baseOpacity)
+        : this._applyOpacity(this._config.duration_border_color || 'orange',
+            Number(this._config.duration_border_opacity) || baseOpacity);
+      return { color: col, pulse, blur };
     }
 
-    if (humidityActive) {
-      return {
-        color: this._applyOpacity(
-          this._config.humidity_border_color || 'red',
-          Number(this._config.humidity_border_opacity) || baseOpacity
-        ),
-        pulse: !!this._config.pulse_enabled,
-        blur,
-      };
+    if (humidityInfo.active && durationInfo.active) {
+      const mixed = this._mixColors(
+        this._config.humidity_border_color || 'red',
+        this._config.duration_border_color || 'orange'
+      );
+      const op = ((Number(this._config.humidity_border_opacity) || 1) +
+                  (Number(this._config.duration_border_opacity) || 1)) / 2;
+      return { color: this._applyOpacity(mixed, op), pulse, blur };
     }
 
-    if (durationActive) {
-      return {
-        color: this._applyOpacity(
-          this._config.duration_border_color || 'orange',
-          Number(this._config.duration_border_opacity) || baseOpacity
-        ),
-        pulse: !!this._config.pulse_enabled,
-        blur,
-      };
-    }
+    if (humidityInfo.active) return {
+      color: this._applyOpacity(this._config.humidity_border_color || 'red',
+        Number(this._config.humidity_border_opacity) || baseOpacity),
+      pulse, blur,
+    };
 
-    // No active warning — check if border should be hidden when closed
-    if (!isOpen && this._config.border_closed_enabled === false) {
+    if (durationInfo.active) return {
+      color: this._applyOpacity(this._config.duration_border_color || 'orange',
+        Number(this._config.duration_border_opacity) || baseOpacity),
+      pulse, blur,
+    };
+
+    if (!isOpen && this._config.border_closed_enabled === false)
       return { color: 'transparent', pulse: false, blur: 0 };
-    }
 
-    let baseColor = this._config.border_color || 'var(--divider-color, #a0a0a0)';
+    let baseColor = this._config.border_color || 'var(--divider-color,#a0a0a0)';
     if (this._config.border_color_entity) {
-      const borderEntity = this._hass.states[this._config.border_color_entity];
-      if (borderEntity && borderEntity.state) {
-        baseColor = borderEntity.state;
-      }
+      const be = this._hass.states[this._config.border_color_entity];
+      if (be?.state) baseColor = be.state;
     }
     return { color: this._applyOpacity(baseColor, baseOpacity), pulse: false, blur };
   }
 
   _formatDuration(seconds) {
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    if (hours > 0) return `${hours}h ${remainingMinutes}m`;
-    if (minutes > 0) return `${minutes}m ${seconds % 60}s`;
-    return `${seconds}s`;
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    if (h > 0) return `${h}h ${m}m`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
   }
 }
 
@@ -427,16 +446,12 @@ class FensterkarteCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._form && this._hass) {
-      this._render();
-    }
+    if (!this._form && this._hass) this._render();
   }
 
   set config(config) {
     if (!config) return;
-    if (!this._cardType && config.type) {
-      this._cardType = config.type;
-    }
+    if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...config };
     if (this._form) {
       this._form.schema = this._getSchema(this._config);
@@ -446,11 +461,8 @@ class FensterkarteCardEditor extends HTMLElement {
     }
   }
 
-  get config() {
-    return this._config;
-  }
+  get config() { return this._config; }
 
-  // Strip type — ha-form must never see or modify it
   _getFormData() {
     const { type, ...rest } = this._config;
     return rest;
@@ -458,49 +470,34 @@ class FensterkarteCardEditor extends HTMLElement {
 
   _render() {
     if (!this.shadowRoot || !this._hass) return;
-
-    this.shadowRoot.innerHTML = `
-      <style>
-        div { padding: 16px; }
-      </style>
-      <div></div>
-    `;
-
-    const div = this.shadowRoot.querySelector('div');
+    this.shadowRoot.innerHTML = `<style>div{padding:16px}</style><div></div>`;
     const form = document.createElement('ha-form');
-
     form.hass = this._hass;
     form.data = this._getFormData();
     form.schema = this._getSchema(this._config);
 
-    form.addEventListener('value-changed', (event) => {
-      const { type, ...storedFormData } = this._config;
+    form.addEventListener('value-changed', (e) => {
+      const { type, ...stored } = this._config;
       const cardType = type || this._cardType || 'custom:fensterkarte-card';
-      // Start with all defaults so no field is ever lost, even if ha-form
-      // only emits the changed field or this._config is not yet fully set.
       const newConfig = {
         type: cardType,
         ...FensterkarteCard.getStubConfig(),
-        ...storedFormData,
-        ...event.detail.value,
+        ...stored,
+        ...e.detail.value,
       };
       this._config = { ...newConfig };
       form.schema = this._getSchema(newConfig);
-      this.dispatchEvent(
-        new CustomEvent('config-changed', {
-          detail: { config: newConfig },
-          bubbles: true,
-          composed: true,
-        })
-      );
+      this.dispatchEvent(new CustomEvent('config-changed', {
+        detail: { config: newConfig }, bubbles: true, composed: true,
+      }));
     });
 
-    div.appendChild(form);
+    this.shadowRoot.querySelector('div').appendChild(form);
     this._form = form;
   }
 
-  _getSchema(config = {}) {
-    const colorOptions = [
+  _getSchema(cfg = {}) {
+    const colors = [
       { value: 'transparent', label: 'Transparent' },
       { value: 'green', label: 'Grün' },
       { value: 'yellow', label: 'Gelb' },
@@ -512,45 +509,72 @@ class FensterkarteCardEditor extends HTMLElement {
       { value: 'black', label: 'Schwarz' },
       { value: 'white', label: 'Weiß' },
     ];
-    const positionOptions = [
+    const positions = [
       { value: 'left', label: 'Links' },
+      { value: 'center', label: 'Mitte' },
       { value: 'right', label: 'Rechts' },
       { value: 'top', label: 'Oben' },
       { value: 'bottom', label: 'Unten' },
     ];
+    const slider = (min, max, step) => ({ number: { min, max, step, mode: 'slider' } });
 
     const schema = [
       { name: 'entity', label: 'Entität', required: true, selector: { entity: {} } },
       { name: 'name', label: 'Anzeigename', selector: { text: {} } },
+
       { name: 'show_icon', label: 'Icon anzeigen', selector: { boolean: {} } },
-      { name: 'icon_position', label: 'Icon Position', selector: { select: { options: positionOptions } } },
-      { name: 'icon_size', label: 'Icon Größe (px)', selector: { number: { min: 16, max: 120, step: 2, mode: 'slider' } } },
+      { name: 'icon_position', label: 'Icon Position', selector: { select: { options: positions } } },
+      { name: 'icon_size', label: 'Icon Größe (px)', selector: slider(16, 128, 2) },
       { name: 'open_icon', label: 'Icon geöffnet', selector: { icon: {} } },
       { name: 'closed_icon', label: 'Icon geschlossen', selector: { icon: {} } },
+
       { name: 'show_name', label: 'Name anzeigen', selector: { boolean: {} } },
-      { name: 'name_position', label: 'Name Position', selector: { select: { options: positionOptions } } },
-      { name: 'name_size', label: 'Schriftgröße (px)', selector: { number: { min: 10, max: 48, step: 1, mode: 'slider' } } },
+      { name: 'name_position', label: 'Name Position', selector: { select: { options: positions } } },
+      { name: 'name_size', label: 'Schriftgröße (px)', selector: slider(10, 48, 1) },
       { name: 'show_state', label: 'Status anzeigen', selector: { boolean: {} } },
-      { name: 'border_color', label: 'Randfarbe', selector: { select: { options: colorOptions } } },
-      { name: 'border_opacity', label: 'Rand Deckkraft', selector: { number: { min: 0, max: 1, step: 0.05, mode: 'slider' } } },
-      { name: 'border_blur', label: 'Rand Unschärfe (px)', selector: { number: { min: 0, max: 30, step: 1, mode: 'slider' } } },
-      { name: 'border_closed_enabled', label: 'Rand bei geschlossenem Zustand anzeigen', selector: { boolean: {} } },
+
+      { name: 'card_height', label: 'Kartenhöhe (px, 0 = automatisch)', selector: slider(0, 400, 4) },
+
+      { name: 'border_color', label: 'Randfarbe (geschlossen)', selector: { select: { options: colors } } },
+      { name: 'border_opacity', label: 'Rand Deckkraft', selector: slider(0, 1, 0.05) },
+      { name: 'border_blur', label: 'Rand Unschärfe / Glow (px)', selector: slider(0, 30, 1) },
+      { name: 'border_closed_enabled', label: 'Rand bei geschlossenem Fenster anzeigen', selector: { boolean: {} } },
       { name: 'border_color_entity', label: 'Randfarbe über Entität', selector: { entity: {} } },
-      { name: 'duration_enabled', label: 'Öffnungsdauer-Warnung aktiv', selector: { boolean: {} } },
+
+      { name: 'preview_warning', label: 'Warnung testen (Vorschau aktiv)', selector: { boolean: {} } },
+
+      { name: 'pulse_enabled', label: 'Rand pulsieren bei Warnung', selector: { boolean: {} } },
     ];
 
-    if (config.duration_enabled) {
+    if (cfg.pulse_enabled) {
       schema.push(
-        { name: 'duration_threshold', label: 'Warnschwelle (Sekunden)', selector: { number: { min: 0, max: 86400, step: 60, mode: 'box' } } },
-        { name: 'duration_entity', label: 'Dauer-Entität (optional)', selector: { entity: {} } },
-        { name: 'duration_border_color', label: 'Randfarbe Dauerwarnung', selector: { select: { options: colorOptions } } },
-        { name: 'duration_border_opacity', label: 'Deckkraft Dauerwarnung', selector: { number: { min: 0, max: 1, step: 0.05, mode: 'slider' } } },
-        { name: 'temperature_warning_enabled', label: 'Nur bei Temperatur warnen', selector: { boolean: {} } }
+        { name: 'pulse_interval', label: 'Puls Intervall (Sekunden)', selector: slider(0.3, 5, 0.1) }
       );
-      if (config.temperature_warning_enabled) {
+    }
+
+    schema.push(
+      { name: 'duration_enabled', label: 'Öffnungsdauer-Warnung', selector: { boolean: {} } }
+    );
+
+    if (cfg.duration_enabled) {
+      schema.push(
+        { name: 'duration_threshold', label: 'Warnschwelle (HH:MM:SS)', selector: { text: {} } },
+        { name: 'duration_entity', label: 'Dauer-Entität (optional)', selector: { entity: {} } },
+        { name: 'duration_border_color', label: 'Randfarbe Dauerwarnung', selector: { select: { options: colors } } },
+        { name: 'duration_border_opacity', label: 'Deckkraft Dauerwarnung', selector: slider(0, 1, 0.05) },
+        { name: 'temperature_warning_enabled', label: 'Nur bei bestimmter Temperatur warnen', selector: { boolean: {} } }
+      );
+      if (cfg.temperature_warning_enabled) {
         schema.push(
           { name: 'temperature_entity', label: 'Temperatur-Entität', selector: { entity: {} } },
-          { name: 'temperature_threshold', label: 'Temperaturschwelle (°C)', selector: { number: { min: -50, max: 50, step: 0.5, mode: 'box' } } },
+          { name: 'temperature_unit', label: 'Einheit', selector: { select: { options: [
+            { value: 'celsius', label: '°C' },
+            { value: 'fahrenheit', label: '°F' },
+          ] } } },
+          { name: 'temperature_threshold', label: `Schwelle (${cfg.temperature_unit === 'fahrenheit' ? '°F' : '°C'})`,
+            selector: { number: { min: cfg.temperature_unit === 'fahrenheit' ? -58 : -50,
+                                   max: cfg.temperature_unit === 'fahrenheit' ? 122 : 50,
+                                   step: 0.5, mode: 'box' } } },
           { name: 'temperature_threshold_mode', label: 'Bedingung', selector: { select: { options: [
             { value: 'below', label: 'Unter dem Schwellenwert' },
             { value: 'above', label: 'Über dem Schwellenwert' },
@@ -559,18 +583,18 @@ class FensterkarteCardEditor extends HTMLElement {
       }
     }
 
-    schema.push({ name: 'humidity_warning_enabled', label: 'Feuchtigkeitswarnung aktiv', selector: { boolean: {} } });
+    schema.push(
+      { name: 'humidity_warning_enabled', label: 'Feuchtigkeitswarnung', selector: { boolean: {} } }
+    );
 
-    if (config.humidity_warning_enabled) {
+    if (cfg.humidity_warning_enabled) {
       schema.push(
         { name: 'humidity_entity', label: 'Feuchtigkeits-Entität', selector: { entity: {} } },
-        { name: 'humidity_warning_threshold', label: 'Schwellenwert (%)', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
-        { name: 'humidity_border_color', label: 'Randfarbe Feuchtigkeitswarnung', selector: { select: { options: colorOptions } } },
-        { name: 'humidity_border_opacity', label: 'Deckkraft Feuchtigkeitswarnung', selector: { number: { min: 0, max: 1, step: 0.05, mode: 'slider' } } }
+        { name: 'humidity_warning_threshold', label: 'Schwellenwert (%)', selector: slider(0, 100, 1) },
+        { name: 'humidity_border_color', label: 'Randfarbe Feuchtigkeitswarnung', selector: { select: { options: colors } } },
+        { name: 'humidity_border_opacity', label: 'Deckkraft Feuchtigkeitswarnung', selector: slider(0, 1, 0.05) }
       );
     }
-
-    schema.push({ name: 'pulse_enabled', label: 'Rand pulsieren bei Warnung', selector: { boolean: {} } });
 
     return schema;
   }
