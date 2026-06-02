@@ -38,6 +38,7 @@ class FensterkarteCard extends HTMLElement {
       border_color_open: [255, 200, 0],
       border_opacity: 1,
       border_blur: 4,
+      border_radius: 14,
       border_open_enabled: true,
       border_closed_enabled: true,
       border_color_entity: '',
@@ -46,6 +47,8 @@ class FensterkarteCard extends HTMLElement {
       duration_entity: '',
       duration_border_color: [255, 140, 0],
       duration_border_opacity: 1,
+      show_duration_text: true,
+      show_duration_on_warning_only: false,
       temperature_warning_enabled: false,
       temperature_entity: '',
       temperature_threshold: 18,
@@ -56,6 +59,7 @@ class FensterkarteCard extends HTMLElement {
       humidity_warning_threshold: 65,
       humidity_border_color: [220, 50, 50],
       humidity_border_opacity: 1,
+      show_humidity_text: true,
       preview_warning: false,
       pulse_enabled: false,
       pulse_style: 'glow_out',
@@ -115,7 +119,9 @@ class FensterkarteCard extends HTMLElement {
     // ── Outer border shell (gradient or solid) ───────────────────────────
     const borderEl = document.createElement('div');
     borderEl.className = 'fensterkarte-border';
-    borderEl.style.borderRadius = '14px';
+    const borderRadius = Number(this._config.border_radius) || 14;
+    const innerRadius = Math.max(borderRadius - 2, 0);
+    borderEl.style.borderRadius = `${borderRadius}px`;
     borderEl.style.padding = '2px';
     borderEl.style.background = this._buildGradient(border.colors);
     borderEl.style.boxSizing = 'border-box';
@@ -141,7 +147,7 @@ class FensterkarteCard extends HTMLElement {
     // ── Inner card wrapper ───────────────────────────────────────────────
     const wrapper = document.createElement('div');
     wrapper.className = 'fensterkarte-wrapper';
-    wrapper.style.borderRadius = '12px';
+    wrapper.style.borderRadius = `${innerRadius}px`;
     wrapper.style.background = 'var(--card-background-color, rgba(255,255,255,0.9))';
     wrapper.style.padding = '12px';
     wrapper.style.display = 'flex';
@@ -220,12 +226,15 @@ class FensterkarteCard extends HTMLElement {
     extra.style.fontSize = '0.82em';
     extra.style.opacity = '0.82';
 
-    if (durationInfo.label) {
-      const dl = document.createElement('div');
-      dl.textContent = durationInfo.label;
-      extra.appendChild(dl);
+    if (durationInfo.label && this._config.show_duration_text !== false) {
+      const shouldShow = this._config.show_duration_on_warning_only ? durationInfo.active : true;
+      if (shouldShow) {
+        const dl = document.createElement('div');
+        dl.textContent = durationInfo.label;
+        extra.appendChild(dl);
+      }
     }
-    if (humidityInfo.label) {
+    if (humidityInfo.label && this._config.show_humidity_text !== false) {
       const hl = document.createElement('div');
       hl.textContent = humidityInfo.label;
       extra.appendChild(hl);
@@ -588,6 +597,7 @@ class FensterkarteCardEditor extends HTMLElement {
       { name: 'name_size', label: 'Schriftgröße (px)', selector: sl(10, 48, 1) },
       { name: 'show_state', label: 'Status anzeigen', selector: { boolean: {} } },
       { name: 'tap_action', label: 'Aktion beim Tippen', selector: { action: {} } },
+      { name: 'border_radius', label: 'Eckenradius (px)', selector: sl(0, 20, 1) },
     ]);
 
     // ── Section: Rand & Farbe ──────────────────────────────────────────
@@ -623,6 +633,8 @@ class FensterkarteCardEditor extends HTMLElement {
     // ── Section: Öffnungsdauer-Warnung ─────────────────────────────────
     const dauerSchema = [
       { name: 'duration_enabled', label: 'Aktiviert', selector: { boolean: {} } },
+      { name: 'show_duration_text', label: 'Dauer in der Karte anzeigen', selector: { boolean: {} } },
+      { name: 'show_duration_on_warning_only', label: 'Nur bei Warnung anzeigen', selector: { boolean: {} } },
     ];
     if (cfg.duration_enabled) {
       dauerSchema.push(
@@ -657,6 +669,7 @@ class FensterkarteCardEditor extends HTMLElement {
     // ── Section: Feuchtigkeitswarnung ──────────────────────────────────
     const feuchSchema = [
       { name: 'humidity_warning_enabled', label: 'Aktiviert', selector: { boolean: {} } },
+      { name: 'show_humidity_text', label: 'Text in der Karte anzeigen', selector: { boolean: {} } },
     ];
     if (cfg.humidity_warning_enabled) {
       feuchSchema.push(
