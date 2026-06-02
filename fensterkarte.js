@@ -540,13 +540,14 @@ class FensterkarteCardEditor extends HTMLElement {
     }
   }
 
-  // HA calls setConfig() (method), not the property setter, when opening an existing card.
-  // Both must exist; setConfig bypasses echo-suppression (it's never an echo).
+  // HA calls setConfig() for both initial load AND echoes (since the method now exists).
+  // Must also suppress echoes to prevent re-renders while the user is typing.
   setConfig(config) {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...FensterkarteCard.getStubConfig(), ...config };
     this._configReceived = true;
+    if (this._suppressConfigUpdate) return;
     if (!this._hass) return;
     const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
     this._render(open);
@@ -567,7 +568,13 @@ class FensterkarteCardEditor extends HTMLElement {
 
   _getFormData() {
     const { type, ...rest } = this._config;
-    return rest;
+    // Strip null values — ha-form's color_rgb selector throws "t is not iterable"
+    // when it receives null instead of undefined or a valid [r,g,b] array.
+    const clean = {};
+    for (const [k, v] of Object.entries(rest)) {
+      if (v !== null) clean[k] = v;
+    }
+    return clean;
   }
 
   // Returns a Set of currently expanded panel headers
