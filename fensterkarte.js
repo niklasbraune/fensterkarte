@@ -58,6 +58,7 @@ class FensterkarteCard extends HTMLElement {
       humidity_border_opacity: 1,
       preview_warning: false,
       pulse_enabled: false,
+      pulse_style: 'glow_out',
       pulse_interval: 1.5,
     };
   }
@@ -126,9 +127,13 @@ class FensterkarteCard extends HTMLElement {
       : 'var(--ha-card-box-shadow, none)';
 
     if (border.pulse) {
-      borderEl.style.setProperty('--fk-box-shadow-peak', glowShadow);
-      borderEl.style.setProperty('--fk-pulse-duration', `${Number(this._config.pulse_interval) || 1.5}s`);
-      borderEl.classList.add('fensterkarte-pulse');
+      const pulseStyle = this._config.pulse_style || 'glow_out';
+      const pulseInterval = `${Number(this._config.pulse_interval) || 1.5}s`;
+      borderEl.style.setProperty('--fk-color-1', primaryColor);
+      borderEl.style.setProperty('--fk-glow-size', `${blurPx}px`);
+      borderEl.style.setProperty('--fk-glow-spread', `${Math.ceil(blurPx / 2)}px`);
+      borderEl.style.setProperty('--fk-pulse-duration', pulseInterval);
+      borderEl.classList.add(`fk-pulse-${pulseStyle}`);
     } else {
       borderEl.style.boxShadow = glowShadow;
     }
@@ -265,11 +270,34 @@ class FensterkarteCard extends HTMLElement {
       .fensterkarte-border { height: 100%; }
       .fensterkarte-wrapper { height: 100%; }
       ha-icon { color: var(--paper-item-icon-color, #3F51B5); }
-      @keyframes fensterkarte-pulse {
-        0%, 100% { box-shadow: var(--fk-box-shadow-peak, none); }
-        50% { box-shadow: none; }
+
+      /* ── Pulse keyframes ─────────────────────────────────── */
+      @keyframes fk-anim-glow-out {
+        0%,100% { box-shadow: 0 0 var(--fk-glow-size) var(--fk-glow-spread) var(--fk-color-1); }
+        50%     { box-shadow: none; }
       }
-      .fensterkarte-pulse { animation: fensterkarte-pulse var(--fk-pulse-duration, 1.5s) ease-in-out infinite; }
+      @keyframes fk-anim-glow-in {
+        0%,100% { box-shadow: inset 0 0 var(--fk-glow-size) var(--fk-glow-spread) var(--fk-color-1); }
+        50%     { box-shadow: none; }
+      }
+      @keyframes fk-anim-breathe {
+        0%,100% { box-shadow: 0 0 calc(var(--fk-glow-size) + 8px) var(--fk-glow-size) var(--fk-color-1); }
+        50%     { box-shadow: 0 0 2px 0px var(--fk-color-1); }
+      }
+      @keyframes fk-anim-border {
+        0%,100% { padding: 2px; box-shadow: 0 0 var(--fk-glow-size) var(--fk-glow-spread) var(--fk-color-1); }
+        50%     { padding: 5px; box-shadow: none; }
+      }
+      /* ── Pulse classes (on borderEl) ─────────────────────── */
+      .fk-pulse-glow-out   { animation: fk-anim-glow-out   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
+      .fk-pulse-breathe    { animation: fk-anim-breathe    var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
+      .fk-pulse-border-width { animation: fk-anim-border   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
+      .fk-pulse-glow-both  { animation: fk-anim-glow-out   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
+      /* inner glow targets wrapper (child of borderEl) */
+      .fk-pulse-glow-in   .fensterkarte-wrapper,
+      .fk-pulse-glow-both .fensterkarte-wrapper {
+        animation: fk-anim-glow-in var(--fk-pulse-duration,1.5s) ease-in-out infinite;
+      }
     `;
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(child);
@@ -570,12 +598,26 @@ class FensterkarteCardEditor extends HTMLElement {
       { name: 'border_open_enabled', label: 'Rand anzeigen wenn geöffnet', selector: { boolean: {} } },
       { name: 'border_closed_enabled', label: 'Rand anzeigen wenn geschlossen', selector: { boolean: {} } },
       { name: 'border_color_entity', label: 'Randfarbe über Entität', selector: { entity: {} } },
+    ];
+    this._addSection('Rand & Farbe', open, randSchema);
+
+    // ── Section: Puls & Animation ──────────────────────────────────────
+    const pulseSchema = [
       { name: 'pulse_enabled', label: 'Rand pulsieren bei Warnung', selector: { boolean: {} } },
     ];
     if (cfg.pulse_enabled) {
-      randSchema.push({ name: 'pulse_interval', label: 'Puls-Intervall (Sekunden)', selector: sl(0.3, 5, 0.1) });
+      pulseSchema.push(
+        { name: 'pulse_style', label: 'Animations-Stil', selector: { select: { options: [
+          { value: 'glow_out',      label: 'Außen-Glow (Leuchten nach außen)' },
+          { value: 'glow_in',       label: 'Innen-Glow (Hintergrundbeleuchtung)' },
+          { value: 'glow_both',     label: 'Innen & Außen' },
+          { value: 'breathe',       label: 'Atmen (sanftes Ein-/Ausblenden)' },
+          { value: 'border_width',  label: 'Rand-Breite (Rahmen pulsiert)' },
+        ] } } },
+        { name: 'pulse_interval', label: 'Geschwindigkeit (Sekunden)', selector: sl(0.3, 5, 0.1) }
+      );
     }
-    this._addSection('Rand & Farbe', open, randSchema);
+    this._addSection('Puls & Animation', open, pulseSchema);
 
     // ── Section: Öffnungsdauer-Warnung ─────────────────────────────────
     const dauerSchema = [
