@@ -23,21 +23,22 @@ jobs:
           TAG=${GITHUB_REF#refs/tags/}
           
           # Create zip with all card files
-          zip -r fensterkarte.zip \
+          # Must be named fensterkarte.js.zip so HACS finds it for zip_release
+          zip -r fensterkarte.js.zip \
             fensterkarte.js \
             fensterkarte-editor.js \
             manifest.json \
             hacs.json \
             README.md \
             -x "*.git*"
-          
+
           # Check if zip was created
-          ls -lah fensterkarte.zip
+          ls -lah fensterkarte.js.zip
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ github.ref_name }}
-          files: fensterkarte.zip
+          files: fensterkarte.js.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
