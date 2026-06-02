@@ -448,7 +448,7 @@ class FensterkarteCardEditor extends HTMLElement {
     form.schema = this._getSchema(this._config);
 
     form.addEventListener('value-changed', (event) => {
-      const newConfig = event.detail.value;
+      const newConfig = { ...this._config, ...event.detail.value };
       this._config = newConfig;
       form.schema = this._getSchema(newConfig);
       this.dispatchEvent(
