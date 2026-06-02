@@ -1,0 +1,8 @@
+{
+  "name": "Fensterkarte",
+  "homeassistant": "2024.1.0",
+  "documentation": "https://github.com/niklasbraune/fensterkarte",
+  "issues": "https://github.com/niklasbraune/fensterkarte/issues",
+  "country": ["DE"],
+  "render_readme": true
+}
