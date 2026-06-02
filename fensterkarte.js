@@ -537,17 +537,15 @@ class FensterkarteCardEditor extends HTMLElement {
   set config(config) {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
-    // Merge with defaults to ensure all fields are present even if HA sends partial config
     this._config = { ...FensterkarteCard.getStubConfig(), ...config };
-    // Ignore the echo HA sends back after our own config-changed dispatch —
-    // updating form.data at that point resets focused text inputs
+    // Suppress the echo HA sends after our own config-changed dispatch —
+    // that echo must not trigger a re-render (would lose text input focus)
     if (this._suppressConfigUpdate) return;
-    if (this._forms.length > 0) {
-      const data = this._getFormData();
-      for (const { form } of this._forms) form.data = data;
-    } else if (this._hass) {
-      this._render();
-    }
+    if (!this._hass) return;
+    // Always do a full re-render so ha-form reliably picks up new values.
+    // Preserve which panels are open; default to opening 'Darstellung' on first render.
+    const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
+    this._render(open);
   }
 
   get config() { return this._config; }
