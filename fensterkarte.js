@@ -532,9 +532,10 @@ class FensterkarteCardEditor extends HTMLElement {
   set hass(hass) {
     const firstHass = !this._hass;
     this._hass = hass;
-    // Keep entity-pickers in existing forms current
-    for (const { form } of this._forms) form.hass = this._hass;
-    // Render only when config has already arrived (covers config-before-hass order)
+    // Do NOT push hass to existing forms on every state update — HA calls set hass
+    // for every entity change in the system, and form.hass = x triggers a full
+    // ha-form re-render which crashes on certain selector types (color_rgb, action).
+    // Forms receive fresh hass when _render() is next called.
     if (firstHass && this._configReceived && this._forms.length === 0) {
       this._render(new Set(['Darstellung']));
     }
