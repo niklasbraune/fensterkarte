@@ -405,24 +405,28 @@ class FensterkarteCardEditor extends HTMLElement {
     super();
     this._config = {};
     this._hass = null;
+    this._cardType = null;
     this._form = null;
     this.attachShadow({ mode: 'open' });
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._form && this._hass) {
-      this._render();
-    }
+    this._tryRender();
   }
 
   set config(config) {
-    this._config = config || {};
+    if (!config) return;
+    // Save type once — ha-form never sees it and can never lose it
+    if (!this._cardType && config.type) {
+      this._cardType = config.type;
+    }
+    this._config = { ...config };
     if (this._form) {
       this._form.schema = this._getSchema(this._config);
-      this._form.data = this._config;
+      this._form.data = this._getFormData();
     } else {
-      this._render();
+      this._tryRender();
     }
   }
 
@@ -430,8 +434,21 @@ class FensterkarteCardEditor extends HTMLElement {
     return this._config;
   }
 
+  // Only render once both hass and an actual type are available
+  _tryRender() {
+    if (!this._form && this._hass && this._cardType) {
+      this._render();
+    }
+  }
+
+  // Strip type so ha-form never touches it
+  _getFormData() {
+    const { type, ...rest } = this._config;
+    return rest;
+  }
+
   _render() {
-    if (!this.shadowRoot || !this._hass) return;
+    if (!this.shadowRoot) return;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -444,11 +461,18 @@ class FensterkarteCardEditor extends HTMLElement {
     const form = document.createElement('ha-form');
 
     form.hass = this._hass;
-    form.data = this._config;
+    form.data = this._getFormData();
     form.schema = this._getSchema(this._config);
 
     form.addEventListener('value-changed', (event) => {
-      const newConfig = { ...this._config, ...event.detail.value };
+      // event.detail.value = all schema fields (no type)
+      // Merge: keep non-schema fields from this._config, apply form changes on top
+      const { type: _t, ...storedFormData } = this._config;
+      const newConfig = {
+        type: this._cardType,
+        ...storedFormData,
+        ...event.detail.value,
+      };
       this._config = newConfig;
       form.schema = this._getSchema(newConfig);
       this.dispatchEvent(
