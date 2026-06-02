@@ -523,7 +523,15 @@ class FensterkarteCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    if (this._forms.length === 0 && this._hass) this._render();
+    // Update hass on existing forms so entity pickers stay current
+    for (const { form } of this._forms) form.hass = this._hass;
+    // Defer first render so set config can run first — HA sets both synchronously
+    // and Promise.resolve() defers until after both setters have run
+    if (this._forms.length === 0) {
+      Promise.resolve().then(() => {
+        if (this._forms.length === 0 && this._hass) this._render();
+      });
+    }
   }
 
   set config(config) {
