@@ -5,7 +5,9 @@ class FensterkarteCardEditor extends HTMLElement {
     this._hass = null;
     this._form = null;
     this._refreshTimeout = null;
-    this._debounceDelay = 2000; // ms
+    this._debounceDelay = 1000; // ms — faster schema refresh
+    this._refreshIndicator = null;
+    this._isRefreshing = false;
     this.attachShadow({ mode: 'open' });
   }
 
@@ -53,6 +55,36 @@ class FensterkarteCardEditor extends HTMLElement {
     wrapper.style.display = 'grid';
     wrapper.style.gap = '16px';
     wrapper.style.maxWidth = '700px';
+    wrapper.style.position = 'relative';
+
+    const refreshIndicator = document.createElement('div');
+    refreshIndicator.className = 'refresh-indicator';
+    refreshIndicator.style.position = 'absolute';
+    refreshIndicator.style.top = '12px';
+    refreshIndicator.style.right = '12px';
+    refreshIndicator.style.width = '20px';
+    refreshIndicator.style.height = '20px';
+    refreshIndicator.style.borderRadius = '50%';
+    refreshIndicator.style.border = '2px solid transparent';
+    refreshIndicator.style.display = 'none';
+    this._refreshIndicator = refreshIndicator;
+
+    const style = document.createElement('style');
+    style.textContent = `
+      :host {
+        --primary-color: var(--primary-color, #03a9f4);
+      }
+      .refresh-indicator {
+        border-top-color: var(--primary-color);
+        border-right-color: var(--primary-color);
+        animation: spin 0.8s linear infinite;
+      }
+      @keyframes spin {
+        to { transform: rotate(360deg); }
+      }
+    `;
+    wrapper.appendChild(style);
+    wrapper.appendChild(refreshIndicator);
 
     const form = document.createElement('ha-form');
     form.data = this._config;
@@ -93,12 +125,28 @@ class FensterkarteCardEditor extends HTMLElement {
       return;
     }
 
+    this._isRefreshing = true;
+    if (this._refreshIndicator) {
+      this._refreshIndicator.style.display = 'block';
+    }
+
     if (!this._form) return;
     try {
       this._form.hass = this._hass;
       this._form.schema = this._getSchema();
       this._form.data = this._config;
+      // Hide indicator after successful refresh
+      if (this._refreshIndicator) {
+        setTimeout(() => {
+          this._refreshIndicator.style.display = 'none';
+          this._isRefreshing = false;
+        }, 200);
+      }
     } catch (e) {
+      this._isRefreshing = false;
+      if (this._refreshIndicator) {
+        this._refreshIndicator.style.display = 'none';
+      }
       // fallback: full render if updating the form fails
       this._render();
     }
