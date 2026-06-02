@@ -38,6 +38,7 @@ class FensterkarteCard extends HTMLElement {
       border_color_open: [255, 200, 0],
       border_opacity: 1,
       border_blur: 4,
+      border_open_enabled: true,
       border_closed_enabled: true,
       border_color_entity: '',
       duration_enabled: false,
@@ -445,6 +446,8 @@ class FensterkarteCard extends HTMLElement {
 
     if (!isOpen && this._config.border_closed_enabled === false)
       return { colors: ['transparent'], pulse: false, blur: 0 };
+    if (isOpen && this._config.border_open_enabled === false)
+      return { colors: ['transparent'], pulse: false, blur: 0 };
 
     let baseColor = isOpen
       ? (this._config.border_color_open || this._config.border_color || [0,128,0])
@@ -505,36 +508,31 @@ class FensterkarteCardEditor extends HTMLElement {
     return rest;
   }
 
-  _render() {
-    if (!this.shadowRoot || !this._hass) return;
-    this._forms = [];
+  // Returns a Set of currently expanded panel headers
+  _getExpandedPanels() {
+    const expanded = new Set();
+    this.shadowRoot.querySelectorAll('ha-expansion-panel').forEach(p => {
+      if (p.expanded) expanded.add(p.header);
+    });
+    return expanded;
+  }
 
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display: block; }
-        details { border-bottom: 1px solid var(--divider-color, #e0e0e0); }
-        summary {
-          padding: 14px 16px; font-weight: 500; cursor: pointer; user-select: none;
-          display: flex; align-items: center; justify-content: space-between;
-          color: var(--primary-text-color); list-style: none;
-        }
-        summary::-webkit-details-marker { display: none; }
-        summary::after { content: '▾'; font-size: 16px; color: var(--secondary-text-color); }
-        details[open] summary::after { content: '▴'; }
-        .section-form { padding: 0 4px 8px; }
-        .test-row { padding: 2px 16px 10px; display: flex; gap: 8px; flex-wrap: wrap; }
-        .test-btn {
-          font-size: 12px; padding: 4px 12px; border-radius: 12px;
-          border: 1px solid var(--primary-color, #3F51B5);
-          background: transparent; color: var(--primary-color, #3F51B5);
-          cursor: pointer; font-family: inherit;
-        }
-        .test-btn.active { background: var(--primary-color, #3F51B5); color: white; }
-      </style>
-    `;
+  _render(expandedPanels = null) {
+    if (!this.shadowRoot || !this._hass) return;
+
+    // Save which panels are open; default to opening 'Darstellung' on first render
+    const open = expandedPanels ?? this._getExpandedPanels();
+    if (open.size === 0) open.add('Darstellung');
+
+    this._forms = [];
+    this.shadowRoot.innerHTML = `<style>
+      :host { display: block; }
+      ha-expansion-panel { margin-bottom: 4px; }
+      .panel-content { padding: 0 8px 8px; }
+      .test-row { padding: 4px 8px 8px; }
+    </style>`;
 
     const cfg = this._config;
-    const data = this._getFormData();
     const sl = (min, max, step) => ({ number: { min, max, step, mode: 'slider' } });
     const positions = [
       { value: 'left', label: 'Links' }, { value: 'center', label: 'Mitte' },
@@ -543,7 +541,7 @@ class FensterkarteCardEditor extends HTMLElement {
     ];
 
     // ── Section: Darstellung ───────────────────────────────────────────
-    this._addSection('Darstellung', [
+    this._addSection('Darstellung', open, [
       { name: 'entity', label: 'Entität', required: true, selector: { entity: {} } },
       { name: 'name', label: 'Anzeigename', selector: { text: {} } },
       { name: 'show_icon', label: 'Icon anzeigen', selector: { boolean: {} } },
@@ -558,7 +556,7 @@ class FensterkarteCardEditor extends HTMLElement {
       { name: 'name_size', label: 'Schriftgröße (px)', selector: sl(10, 48, 1) },
       { name: 'show_state', label: 'Status anzeigen', selector: { boolean: {} } },
       { name: 'tap_action', label: 'Aktion beim Tippen', selector: { action: {} } },
-    ], { open: true });
+    ]);
 
     // ── Section: Rand & Farbe ──────────────────────────────────────────
     const randSchema = [
@@ -566,14 +564,15 @@ class FensterkarteCardEditor extends HTMLElement {
       { name: 'border_color_open', label: 'Randfarbe (geöffnet, keine Warnung)', selector: { color_rgb: {} } },
       { name: 'border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) },
       { name: 'border_blur', label: 'Unschärfe / Glow (px)', selector: sl(0, 30, 1) },
-      { name: 'border_closed_enabled', label: 'Rand bei geschlossenem Fenster', selector: { boolean: {} } },
+      { name: 'border_open_enabled', label: 'Rand anzeigen wenn geöffnet', selector: { boolean: {} } },
+      { name: 'border_closed_enabled', label: 'Rand anzeigen wenn geschlossen', selector: { boolean: {} } },
       { name: 'border_color_entity', label: 'Randfarbe über Entität', selector: { entity: {} } },
       { name: 'pulse_enabled', label: 'Rand pulsieren bei Warnung', selector: { boolean: {} } },
     ];
     if (cfg.pulse_enabled) {
       randSchema.push({ name: 'pulse_interval', label: 'Puls-Intervall (Sekunden)', selector: sl(0.3, 5, 0.1) });
     }
-    this._addSection('Rand & Farbe', randSchema);
+    this._addSection('Rand & Farbe', open, randSchema);
 
     // ── Section: Öffnungsdauer-Warnung ─────────────────────────────────
     const dauerSchema = [
@@ -607,7 +606,7 @@ class FensterkarteCardEditor extends HTMLElement {
         );
       }
     }
-    this._addSection('Öffnungsdauer-Warnung', dauerSchema, { testWarning: 'duration' });
+    this._addSection('Öffnungsdauer-Warnung', open, dauerSchema, 'duration');
 
     // ── Section: Feuchtigkeitswarnung ──────────────────────────────────
     const feuchSchema = [
@@ -621,54 +620,47 @@ class FensterkarteCardEditor extends HTMLElement {
         { name: 'humidity_border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) }
       );
     }
-    this._addSection('Feuchtigkeitswarnung', feuchSchema, { testWarning: 'humidity' });
+    this._addSection('Feuchtigkeitswarnung', open, feuchSchema, 'humidity');
   }
 
-  _addSection(title, schema, { open = false, testWarning = null } = {}) {
-    const details = document.createElement('details');
-    if (open) details.open = true;
+  _addSection(title, openSet, schema, testWarning = null) {
+    const panel = document.createElement('ha-expansion-panel');
+    panel.header = title;
+    panel.outlined = true;
+    panel.expanded = openSet.has(title);
 
-    const summary = document.createElement('summary');
-    summary.textContent = title;
-    details.appendChild(summary);
+    const content = document.createElement('div');
+    content.className = 'panel-content';
 
+    // Test button for warning sections
     if (testWarning) {
-      const row = document.createElement('div');
-      row.className = 'test-row';
-      const btn = document.createElement('button');
-      btn.className = 'test-btn' + (this._config.preview_warning === testWarning ? ' active' : '');
+      const isActive = this._config.preview_warning === testWarning;
+      const btnRow = document.createElement('div');
+      btnRow.className = 'test-row';
+      const btn = document.createElement('ha-button');
       btn.dataset.warning = testWarning;
-      btn.textContent = 'Warnung testen';
+      btn.textContent = isActive ? 'Vorschau beenden' : 'Warnung testen';
+      if (isActive) btn.setAttribute('unelevated', '');
       btn.addEventListener('click', (e) => {
         e.stopPropagation();
-        const prev = this._config.preview_warning;
-        const next = prev === testWarning ? false : testWarning;
+        const next = this._config.preview_warning === testWarning ? false : testWarning;
         this._applyChange({ preview_warning: next });
-        this.shadowRoot.querySelectorAll('.test-btn').forEach(b => {
-          b.classList.toggle('active', b.dataset.warning === next);
-        });
       });
-      row.appendChild(btn);
-      details.appendChild(row);
+      btnRow.appendChild(btn);
+      content.appendChild(btnRow);
     }
 
-    const formWrap = document.createElement('div');
-    formWrap.className = 'section-form';
     const form = document.createElement('ha-form');
     form.hass = this._hass;
     form.data = this._getFormData();
     form.schema = schema;
-    // ha-form ignores schema.label by default — provide computeLabel so our labels are used
     form.computeLabel = (s) => s.label || s.name;
+    form.addEventListener('value-changed', (e) => this._applyChange(e.detail.value));
 
-    form.addEventListener('value-changed', (e) => {
-      this._applyChange(e.detail.value);
-    });
-
-    this._forms.push({ form, title, testWarning });
-    formWrap.appendChild(form);
-    details.appendChild(formWrap);
-    this.shadowRoot.appendChild(details);
+    this._forms.push({ form, title });
+    content.appendChild(form);
+    panel.appendChild(content);
+    this.shadowRoot.appendChild(panel);
   }
 
   _applyChange(value) {
@@ -682,10 +674,11 @@ class FensterkarteCardEditor extends HTMLElement {
     };
     this._config = { ...newConfig };
 
-    // If schema-conditional fields changed, rebuild sections
     const triggers = ['duration_enabled', 'temperature_warning_enabled', 'humidity_warning_enabled', 'pulse_enabled'];
     if (triggers.some(k => k in value)) {
-      this._render();
+      // Save expanded state before rebuilding, so panels stay open
+      const openPanels = this._getExpandedPanels();
+      this._render(openPanels);
     } else {
       const data = this._getFormData();
       for (const { form } of this._forms) form.data = data;
