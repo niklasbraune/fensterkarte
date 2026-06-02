@@ -60,6 +60,7 @@ class FensterkarteCard extends HTMLElement {
       humidity_border_color: [220, 50, 50],
       humidity_border_opacity: 1,
       show_humidity_text: true,
+      humidity_warning_text: '',
       preview_warning: false,
       pulse_enabled: false,
       pulse_style: 'glow_out',
@@ -106,12 +107,18 @@ class FensterkarteCard extends HTMLElement {
     const state = entity.state;
     const isOpen = this._isOpen(state);
     const label = this._config.name || entity.attributes.friendly_name || entity.entity_id;
-    const displayState = this._formatState(state);
     const iconName = isOpen ? this._config.open_icon : this._config.closed_icon;
 
     const durationInfo = this._buildDurationInfo(entity, isOpen);
     const humidityInfo = this._buildHumidityInfo();
     const border = this._computeBorder(isOpen, durationInfo, humidityInfo);
+
+    const preview = this._config.preview_warning;
+    const humidityActive = humidityInfo.active || preview === 'humidity' || preview === 'both' || preview === 'all';
+    const humidityWarningText = this._config.humidity_warning_text;
+    const displayState = (humidityActive && humidityWarningText)
+      ? humidityWarningText
+      : this._formatState(state);
 
     const isCentered = this._config.icon_position === 'center';
     const iconSize = Number(this._config.icon_size) || 36;
@@ -726,6 +733,7 @@ class FensterkarteCardEditor extends HTMLElement {
       feuchSchema.push(
         { name: 'humidity_entity', label: 'Feuchtigkeits-Entität', selector: { entity: {} } },
         { name: 'humidity_warning_threshold', label: 'Schwelle (%)', selector: sl(0, 100, 1) },
+        { name: 'humidity_warning_text', label: 'Warntext (ersetzt Status)', selector: { text: {} } },
         { name: 'humidity_border_color', label: 'Randfarbe', selector: { color_rgb: {} } },
         { name: 'humidity_border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) }
       );
