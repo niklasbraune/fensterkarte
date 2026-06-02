@@ -27,7 +27,17 @@ class FensterkarteCardEditor extends HTMLElement {
 
   set config(config) {
     this._config = config || {};
-    this._render();
+    // If form already exists, update its data to avoid re-creating DOM which
+    // closes open dropdowns. If no form yet, render the editor.
+    if (this._form) {
+      try {
+        this._form.data = this._config;
+      } catch (e) {
+        this._render();
+      }
+    } else {
+      this._render();
+    }
   }
 
   get config() {
