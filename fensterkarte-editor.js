@@ -3,12 +3,26 @@ class FensterkarteCardEditor extends HTMLElement {
     super();
     this._config = {};
     this._hass = null;
+    this._form = null;
+    this._refreshTimeout = null;
+    this._debounceDelay = 2000; // ms
     this.attachShadow({ mode: 'open' });
   }
 
   set hass(hass) {
+    const hadHass = !!this._hass;
     this._hass = hass;
-    this._render();
+    // Avoid re-rendering on every hass update (causes dropdowns/menus to close).
+    // Only render the first time hass is set; config setter will trigger renders when needed.
+    if (!hadHass) {
+      this._render();
+      return;
+    }
+
+    // Debounced update: refresh form schema/data instead of re-creating DOM
+    // This avoids closing open dropdowns. If the user is interacting with the
+    // editor (focused element inside the shadowRoot), skip the update.
+    this._scheduleSchemaRefresh();
   }
 
   set config(config) {
@@ -34,11 +48,50 @@ class FensterkarteCardEditor extends HTMLElement {
     form.data = this._config;
     form.hass = this._hass;
     form.schema = this._getSchema();
-    form.computeLabel = schema => schema.name || schema.type;
+    form.computeLabel = schema => {
+      if (schema.label) return schema.label;
+      const raw = schema.name || schema.type || '';
+      const sentence = raw.replace(/_/g, ' ').toLowerCase();
+      return sentence.charAt(0).toUpperCase() + sentence.slice(1);
+    };
     form.addEventListener('value-changed', event => this._valueChanged(event));
+    this._form = form;
 
     wrapper.appendChild(form);
     this.shadowRoot.appendChild(wrapper);
+  }
+
+  _getDeepActiveElement() {
+    let el = document.activeElement;
+    while (el && el.shadowRoot && el.shadowRoot.activeElement) {
+      el = el.shadowRoot.activeElement;
+    }
+    return el;
+  }
+
+  _scheduleSchemaRefresh() {
+    if (this._refreshTimeout) clearTimeout(this._refreshTimeout);
+    this._refreshTimeout = setTimeout(() => this._refreshSchema(), this._debounceDelay);
+  }
+
+  _refreshSchema() {
+    // If user is interacting inside the editor, skip refresh to avoid closing menus
+    const active = this._getDeepActiveElement();
+    if (active && this.shadowRoot && this.shadowRoot.contains(active)) {
+      // retry after debounce delay
+      this._scheduleSchemaRefresh();
+      return;
+    }
+
+    if (!this._form) return;
+    try {
+      this._form.hass = this._hass;
+      this._form.schema = this._getSchema();
+      this._form.data = this._config;
+    } catch (e) {
+      // fallback: full render if updating the form fails
+      this._render();
+    }
   }
 
   _valueChanged(event) {
