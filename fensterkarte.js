@@ -466,8 +466,8 @@ class FensterkarteCard extends HTMLElement {
     const pulse = !!this._config.pulse_enabled;
     const preview = this._config.preview_warning;
 
-    const durationActive = durationInfo.active || preview === 'duration' || preview === 'both';
-    const humidityActive = humidityInfo.active || preview === 'humidity' || preview === 'both';
+    const durationActive = durationInfo.active || preview === 'duration' || preview === 'both' || preview === 'all';
+    const humidityActive = humidityInfo.active || preview === 'humidity' || preview === 'both' || preview === 'all';
 
     const colors = [];
     if (humidityActive) colors.push(this._applyOpacity(
@@ -580,6 +580,43 @@ class FensterkarteCardEditor extends HTMLElement {
       { value: 'right', label: 'Rechts' }, { value: 'top', label: 'Oben' },
       { value: 'bottom', label: 'Unten' },
     ];
+
+    // ── Section: Warnung testen ────────────────────────────────────────
+    const testWarnings = [
+      { value: 'duration', label: 'Dauer' },
+      { value: 'humidity', label: 'Luftfeuchtigkeit' },
+      { value: 'all', label: 'Alle Warnungen' },
+    ];
+    const testSchema = testWarnings.map(w => ({
+      name: `test_${w.value}`,
+      label: w.label,
+      selector: { boolean: {} }
+    }));
+    // Create the test section with buttons manually
+    const testPanel = document.createElement('ha-expansion-panel');
+    testPanel.header = 'Warnung testen';
+    testPanel.outlined = true;
+    testPanel.expanded = open.has('Warnung testen');
+    const testContent = document.createElement('div');
+    testContent.className = 'panel-content';
+    testContent.style.display = 'flex';
+    testContent.style.gap = '8px';
+    testContent.style.flexWrap = 'wrap';
+    testContent.style.padding = '8px';
+    testWarnings.forEach(w => {
+      const isActive = this._config.preview_warning === w.value;
+      const btn = document.createElement('ha-button');
+      btn.textContent = isActive ? `${w.label} (aktiv)` : w.label;
+      if (isActive) btn.setAttribute('unelevated', '');
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const next = this._config.preview_warning === w.value ? false : w.value;
+        this._applyChange({ preview_warning: next });
+      });
+      testContent.appendChild(btn);
+    });
+    testPanel.appendChild(testContent);
+    this.shadowRoot.appendChild(testPanel);
 
     // ── Section: Darstellung ───────────────────────────────────────────
     this._addSection('Darstellung', open, [
