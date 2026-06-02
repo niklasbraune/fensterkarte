@@ -533,13 +533,25 @@ class FensterkarteCardEditor extends HTMLElement {
     }
   }
 
+  // HA calls setConfig() (method), not the property setter, when opening an existing card.
+  // Both must exist; setConfig bypasses echo-suppression (it's never an echo).
+  setConfig(config) {
+    if (!config) return;
+    if (!this._cardType && config.type) this._cardType = config.type;
+    this._config = { ...FensterkarteCard.getStubConfig(), ...config };
+    this._configReceived = true;
+    if (!this._hass) return;
+    const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
+    this._render(open);
+  }
+
   set config(config) {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...FensterkarteCard.getStubConfig(), ...config };
     this._configReceived = true;
     if (this._suppressConfigUpdate) return;
-    if (!this._hass) return; // render deferred to set hass
+    if (!this._hass) return;
     const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
     this._render(open);
   }
