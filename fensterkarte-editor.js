@@ -8,11 +8,18 @@ class FensterkarteCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
+    if (!this._form && this._hass) {
+      this._render();
+    }
   }
 
   set config(config) {
     this._config = config || {};
-    this._render();
+    if (this._form) {
+      this._form.data = this._config;
+    } else {
+      this._render();
+    }
   }
 
   get config() {
