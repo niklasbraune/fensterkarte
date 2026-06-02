@@ -289,13 +289,13 @@ class FensterkarteCard extends HTMLElement {
         50%     { padding: 5px; box-shadow: none; }
       }
       /* ── Pulse classes (on borderEl) ─────────────────────── */
-      .fk-pulse-glow-out   { animation: fk-anim-glow-out   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
+      .fk-pulse-glow_out   { animation: fk-anim-glow-out   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
       .fk-pulse-breathe    { animation: fk-anim-breathe    var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
-      .fk-pulse-border-width { animation: fk-anim-border   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
-      .fk-pulse-glow-both  { animation: fk-anim-glow-out   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
+      .fk-pulse-border_width { animation: fk-anim-border   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
+      .fk-pulse-glow_both  { animation: fk-anim-glow-out   var(--fk-pulse-duration,1.5s) ease-in-out infinite; }
       /* inner glow targets wrapper (child of borderEl) */
-      .fk-pulse-glow-in   .fensterkarte-wrapper,
-      .fk-pulse-glow-both .fensterkarte-wrapper {
+      .fk-pulse-glow_in   .fensterkarte-wrapper,
+      .fk-pulse-glow_both .fensterkarte-wrapper {
         animation: fk-anim-glow-in var(--fk-pulse-duration,1.5s) ease-in-out infinite;
       }
     `;
@@ -520,7 +520,8 @@ class FensterkarteCardEditor extends HTMLElement {
   set config(config) {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
-    this._config = { ...config };
+    // Merge with defaults to ensure all fields are present even if HA sends partial config
+    this._config = { ...FensterkarteCard.getStubConfig(), ...config };
     // Ignore the echo HA sends back after our own config-changed dispatch —
     // updating form.data at that point resets focused text inputs
     if (this._suppressConfigUpdate) return;
