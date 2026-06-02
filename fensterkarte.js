@@ -493,6 +493,9 @@ class FensterkarteCardEditor extends HTMLElement {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...config };
+    // Ignore the echo HA sends back after our own config-changed dispatch —
+    // updating form.data at that point resets focused text inputs
+    if (this._suppressConfigUpdate) return;
     if (this._forms.length > 0) {
       const data = this._getFormData();
       for (const { form } of this._forms) form.data = data;
@@ -655,7 +658,7 @@ class FensterkarteCardEditor extends HTMLElement {
     form.data = this._getFormData();
     form.schema = schema;
     form.computeLabel = (s) => s.label || s.name;
-    form.addEventListener('value-changed', (e) => this._applyChange(e.detail.value));
+    form.addEventListener('value-changed', (e) => this._applyChange(e.detail.value, form));
 
     this._forms.push({ form, title });
     content.appendChild(form);
@@ -663,7 +666,7 @@ class FensterkarteCardEditor extends HTMLElement {
     this.shadowRoot.appendChild(panel);
   }
 
-  _applyChange(value) {
+  _applyChange(value, sourceForm = null) {
     const { type, ...stored } = this._config;
     const cardType = type || this._cardType || 'custom:fensterkarte-card';
     const newConfig = {
@@ -676,17 +679,22 @@ class FensterkarteCardEditor extends HTMLElement {
 
     const triggers = ['duration_enabled', 'temperature_warning_enabled', 'humidity_warning_enabled', 'pulse_enabled'];
     if (triggers.some(k => k in value)) {
-      // Save expanded state before rebuilding, so panels stay open
       const openPanels = this._getExpandedPanels();
       this._render(openPanels);
     } else {
       const data = this._getFormData();
-      for (const { form } of this._forms) form.data = data;
+      for (const { form } of this._forms) {
+        // Don't reset data on the form the user is actively editing — would lose focus
+        if (form !== sourceForm) form.data = data;
+      }
     }
 
+    // Suppress the set config echo HA sends back after config-changed
+    this._suppressConfigUpdate = true;
     this.dispatchEvent(new CustomEvent('config-changed', {
       detail: { config: newConfig }, bubbles: true, composed: true,
     }));
+    Promise.resolve().then(() => { this._suppressConfigUpdate = false; });
   }
 }
 
