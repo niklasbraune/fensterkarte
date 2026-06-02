@@ -1,0 +1,5 @@
+# Minimales Fensterkarte-Gerüst
+# Kopiere diese Konfiguration in deine Lovelace und füge eine Fenstersensor-Entität hinzu
+
+type: custom:fensterkarte-card
+entity: binary_sensor.fenster_wohnzimmer  # Ersetze mit deiner Fenster-Entität
