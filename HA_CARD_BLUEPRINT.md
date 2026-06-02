@@ -64,12 +64,12 @@ class MyCardEditor extends HTMLElement {
     this._render();
   }
 
-  // Zusätzlich: property setter für interne Aufrufe (z.B. Echo-Unterdrückung)
+  // Zusätzlich: property setter für den Fall dass HA die Property direkt setzt
   set config(config) {
     if (!config) return;
     this._config = { ...MyCard.getStubConfig(), ...config };
     this._configReceived = true;
-    if (this._suppressConfigUpdate) return; // Echo-Schutz
+    if (this._pendingEchos > 0) { this._pendingEchos--; return; } // Echo-Schutz
     if (!this._hass) return;
     this._render();
   }
@@ -109,28 +109,45 @@ set hass(hass) {
 
 ### 2.3 Fokus-Verlust bei Texteingabe verhindern
 
-**Problem:** Jede Änderung dispatcht `config-changed`. HA schickt die Config zurück als Echo. Das setzt `form.data` zurück → Fokus verloren.
+**Problem:** Jede Änderung dispatcht `config-changed`. HA schickt die Config als Echo zurück und ruft `setConfig()` auf → vollständiger Re-Render → DOM wird neu gebaut → Fokus verloren.
 
-**Lösung: Echo unterdrücken mit Flag:**
+**Warum `Promise.resolve().then()` NICHT funktioniert:**
+HA verarbeitet den `config-changed`-Event in einem **Macrotask** (via `await`-Kette). `Promise.resolve().then()` ist ein **Microtask** und läuft *bevor* HA's Macrotask startet. Das Flag ist also bereits `false` wenn der Echo ankommt → kein Schutz.
+
+**Richtige Lösung: `_pendingEchos`-Zähler**
 ```js
+// Im constructor:
+this._pendingEchos = 0;
+
+// In _applyChange — Formulare aktualisieren + Echo zählen:
 _applyChange(value, sourceForm = null) {
   // ... config berechnen ...
   this._config = { ...newConfig };
 
-  // Formulare aktualisieren (NICHT das aktive Formular!)
+  // Formulare aktualisieren (NICHT das aktive Formular — würde Fokus zerstören)
   const data = this._getFormData();
   for (const { form } of this._forms) {
     if (form !== sourceForm) form.data = data;
   }
 
-  // Echo unterdrücken: HA schickt set config() zurück, das ignorieren
-  this._suppressConfigUpdate = true;
+  // Dispatch zählen — Echo wird in setConfig/set config dekrementiert
+  this._pendingEchos++;
+  clearTimeout(this._echoSafetyTimeout);
+  this._echoSafetyTimeout = setTimeout(() => { this._pendingEchos = 0; }, 3000);
   this.dispatchEvent(new CustomEvent('config-changed', {
     detail: { config: newConfig }, bubbles: true, composed: true,
   }));
-  Promise.resolve().then(() => { this._suppressConfigUpdate = false; });
+}
+
+// In setConfig und set config — Echo erkennen und überspringen:
+setConfig(config) {
+  // ...
+  if (this._pendingEchos > 0) { this._pendingEchos--; return; } // Echo — kein Re-Render
+  // ... normaler Render ...
 }
 ```
+
+**Warum das funktioniert:** Der Zähler wird erst dekrementiert wenn das Echo tatsächlich ankommt — keine Timing-Abhängigkeit. Schnelles Tippen (mehrere Dispatches vor dem ersten Echo) wird durch den Zähler korrekt abgebildet. Der `setTimeout(3000)` ist nur ein Sicherheitsnetz falls HA ausnahmsweise kein Echo schickt.
 
 ### 2.4 Re-Render nur bei echter Änderung (Trigger-Felder)
 
@@ -393,10 +410,12 @@ HA's Call Stack zeigt `hui-element-editor.ts` → dort sieht man ob `setConfig` 
 - [ ] `setConfig(config)` auf der Card-Klasse (mit defaults merge)
 - [ ] **`setConfig(config)` auf dem Editor** (PFLICHT — HA ruft Methode auf!)
 - [ ] **`set config` property setter** zusätzlich (für Echo-Unterdrückung)
-- [ ] `_configReceived` Flag im Editor-Constructor initialisieren
-- [ ] `set hass` in Editor: nur `form.hass` updaten + einmalig rendern wenn Config schon da
+- [ ] `_configReceived` und `_pendingEchos = 0` im Editor-Constructor initialisieren
+- [ ] `set hass` in Editor: KEIN `form.hass = hass` bei jedem Update (crasht ha-form!)
 - [ ] `form.computeLabel = (s) => s.label || s.name` auf jeder ha-form-Instanz
-- [ ] Echo-Unterdrückung mit `_suppressConfigUpdate` Flag
+- [ ] Echo-Unterdrückung mit `_pendingEchos` Zähler (KEIN `Promise.resolve()` — Microtask zu früh!)
+- [ ] `null`-Werte in `_getFormData()` herausfiltern (`color_rgb` crasht mit null)
+- [ ] `selector: { action: {} }` NICHT im Schema verwenden (ha-form crasht mit repeat-Fehler)
 - [ ] Trigger-Vergleich gegen OLD config (`stored[k]`) nicht gegen new config
 - [ ] Panel-Zustand über `_getExpandedPanels()` erhalten
 - [ ] CSS-Klassennamen exakt identisch mit JS-generierten Klassennamen
