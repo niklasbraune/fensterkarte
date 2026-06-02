@@ -771,7 +771,7 @@ class FensterkarteCardEditor extends HTMLElement {
     this._config = { ...newConfig };
 
     const triggers = ['duration_enabled', 'temperature_warning_enabled', 'humidity_warning_enabled', 'pulse_enabled'];
-    const triggerChanged = triggers.some(k => k in value && value[k] !== this._config[k]);
+    const triggerChanged = triggers.some(k => k in value && value[k] !== stored[k]);
     if (triggerChanged) {
       const openPanels = this._getExpandedPanels();
       this._render(openPanels);
