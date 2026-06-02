@@ -656,6 +656,8 @@ class FensterkarteCardEditor extends HTMLElement {
     form.hass = this._hass;
     form.data = this._getFormData();
     form.schema = schema;
+    // ha-form ignores schema.label by default — provide computeLabel so our labels are used
+    form.computeLabel = (s) => s.label || s.name;
 
     form.addEventListener('value-changed', (e) => {
       this._applyChange(e.detail.value);
