@@ -52,9 +52,7 @@ class FensterkarteCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config || !config.entity) {
-      throw new Error('Fensterkarte benötigt mindestens die Konfiguration `entity`');
-    }
+    if (!config) throw new Error('Fensterkarte: Ungültige Konfiguration');
     const defaults = FensterkarteCard.getStubConfig();
     this._config = { ...defaults, ...config };
   }
@@ -412,12 +410,13 @@ class FensterkarteCardEditor extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-    this._tryRender();
+    if (!this._form && this._hass) {
+      this._render();
+    }
   }
 
   set config(config) {
     if (!config) return;
-    // Save type once — ha-form never sees it and can never lose it
     if (!this._cardType && config.type) {
       this._cardType = config.type;
     }
@@ -425,8 +424,8 @@ class FensterkarteCardEditor extends HTMLElement {
     if (this._form) {
       this._form.schema = this._getSchema(this._config);
       this._form.data = this._getFormData();
-    } else {
-      this._tryRender();
+    } else if (this._hass) {
+      this._render();
     }
   }
 
@@ -434,21 +433,14 @@ class FensterkarteCardEditor extends HTMLElement {
     return this._config;
   }
 
-  // Only render once both hass and an actual type are available
-  _tryRender() {
-    if (!this._form && this._hass && this._cardType) {
-      this._render();
-    }
-  }
-
-  // Strip type so ha-form never touches it
+  // Strip type — ha-form must never see or modify it
   _getFormData() {
     const { type, ...rest } = this._config;
     return rest;
   }
 
   _render() {
-    if (!this.shadowRoot) return;
+    if (!this.shadowRoot || !this._hass) return;
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -465,15 +457,14 @@ class FensterkarteCardEditor extends HTMLElement {
     form.schema = this._getSchema(this._config);
 
     form.addEventListener('value-changed', (event) => {
-      // event.detail.value = all schema fields (no type)
-      // Merge: keep non-schema fields from this._config, apply form changes on top
-      const { type: _t, ...storedFormData } = this._config;
+      const { type, ...storedFormData } = this._config;
+      const cardType = type || this._cardType;
       const newConfig = {
-        type: this._cardType,
+        ...(cardType ? { type: cardType } : {}),
         ...storedFormData,
         ...event.detail.value,
       };
-      this._config = newConfig;
+      this._config = { ...newConfig };
       form.schema = this._getSchema(newConfig);
       this.dispatchEvent(
         new CustomEvent('config-changed', {
