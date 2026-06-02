@@ -64,8 +64,8 @@ class FensterkarteCard extends HTMLElement {
 
   setConfig(config) {
     if (!config) throw new Error('Fensterkarte: Ungültige Konfiguration');
-    const defaults = FensterkarteCard.getStubConfig();
-    this._config = { ...defaults, ...config };
+    this._config = { ...FensterkarteCard.getStubConfig(), ...config };
+    if (this._hass) this.render();
   }
 
   set hass(hass) {
@@ -110,17 +110,40 @@ class FensterkarteCard extends HTMLElement {
     const iconSize = Number(this._config.icon_size) || 36;
     const cardHeight = Number(this._config.card_height) || 0;
 
+    // ── Outer border shell (gradient or solid) ───────────────────────────
+    const borderEl = document.createElement('div');
+    borderEl.className = 'fensterkarte-border';
+    borderEl.style.borderRadius = '14px';
+    borderEl.style.padding = '2px';
+    borderEl.style.background = this._buildGradient(border.colors);
+    borderEl.style.boxSizing = 'border-box';
+    if (cardHeight > 0) borderEl.style.minHeight = `${cardHeight}px`;
+
+    const blurPx = border.blur;
+    const primaryColor = border.colors[0];
+    const glowShadow = blurPx > 0 && primaryColor !== 'transparent'
+      ? `0 0 ${blurPx}px ${Math.ceil(blurPx / 2)}px ${primaryColor}`
+      : 'var(--ha-card-box-shadow, none)';
+
+    if (border.pulse) {
+      borderEl.style.setProperty('--fk-box-shadow-peak', glowShadow);
+      borderEl.style.setProperty('--fk-pulse-duration', `${Number(this._config.pulse_interval) || 1.5}s`);
+      borderEl.classList.add('fensterkarte-pulse');
+    } else {
+      borderEl.style.boxShadow = glowShadow;
+    }
+
+    // ── Inner card wrapper ───────────────────────────────────────────────
     const wrapper = document.createElement('div');
     wrapper.className = 'fensterkarte-wrapper';
-    wrapper.style.border = `2px solid ${border.color}`;
-    wrapper.style.borderRadius = '14px';
+    wrapper.style.borderRadius = '12px';
     wrapper.style.background = 'var(--card-background-color, rgba(255,255,255,0.9))';
-    wrapper.style.padding = '14px';
+    wrapper.style.padding = '12px';
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
     wrapper.style.gap = '10px';
+    wrapper.style.height = '100%';
     wrapper.style.boxSizing = 'border-box';
-    if (cardHeight > 0) wrapper.style.minHeight = `${cardHeight}px`;
 
     if (isCentered) {
       wrapper.style.flexDirection = 'column';
@@ -130,35 +153,20 @@ class FensterkarteCard extends HTMLElement {
       wrapper.style.flexDirection = this._getFlexDirection();
     }
 
-    // Tap action
-    const action = this._config.tap_action?.action || 'none';
-    if (action !== 'none') {
+    const tapAction = this._config.tap_action?.action;
+    if (tapAction && tapAction !== 'none') {
       wrapper.style.cursor = 'pointer';
       wrapper.addEventListener('click', () => this._handleTap());
     }
 
-    // Box-shadow glow
-    const blurPx = border.blur;
-    const glowShadow = blurPx > 0 && border.color !== 'transparent'
-      ? `0 0 ${blurPx}px ${Math.ceil(blurPx / 2)}px ${border.color}`
-      : 'var(--ha-card-box-shadow, none)';
-    if (border.pulse) {
-      wrapper.style.setProperty('--fk-border-color', border.color);
-      wrapper.style.setProperty('--fk-box-shadow-peak', glowShadow);
-      wrapper.style.setProperty('--fk-pulse-duration', `${Number(this._config.pulse_interval) || 1.5}s`);
-      wrapper.classList.add('fensterkarte-pulse');
-    } else {
-      wrapper.style.boxShadow = glowShadow;
-    }
-
-    // Icon
+    // ── Icon ─────────────────────────────────────────────────────────────
     const icon = document.createElement('ha-icon');
     icon.setAttribute('icon', iconName);
     icon.style.setProperty('--mdc-icon-size', `${iconSize}px`);
     icon.style.width = `${iconSize}px`;
     icon.style.height = `${iconSize}px`;
     icon.style.flexShrink = '0';
-    icon.style.display = this._config.show_icon ? 'flex' : 'none';
+    icon.style.display = this._config.show_icon === false ? 'none' : 'flex';
     icon.style.alignItems = 'center';
     icon.style.justifyContent = 'center';
 
@@ -167,7 +175,7 @@ class FensterkarteCard extends HTMLElement {
       icon.style.color = `rgb(${iconColorArr[0]},${iconColorArr[1]},${iconColorArr[2]})`;
     }
 
-    // Content
+    // ── Content ───────────────────────────────────────────────────────────
     const isNameCenter = this._config.name_position === 'center' || isCentered;
     const content = document.createElement('div');
     content.style.display = 'flex';
@@ -188,13 +196,13 @@ class FensterkarteCard extends HTMLElement {
     nameEl.style.overflow = 'hidden';
     nameEl.style.textOverflow = 'ellipsis';
     nameEl.style.whiteSpace = 'nowrap';
-    nameEl.style.display = this._config.show_name ? 'block' : 'none';
+    nameEl.style.display = this._config.show_name === false ? 'none' : 'block';
 
     const stateEl = document.createElement('div');
     stateEl.textContent = displayState;
     stateEl.style.opacity = '0.85';
     stateEl.style.fontSize = '0.9em';
-    stateEl.style.display = this._config.show_state ? 'block' : 'none';
+    stateEl.style.display = this._config.show_state === false ? 'none' : 'block';
 
     const extra = document.createElement('div');
     extra.style.display = 'flex';
@@ -223,6 +231,7 @@ class FensterkarteCard extends HTMLElement {
     }
     content.appendChild(extra);
 
+    // ── Assemble ──────────────────────────────────────────────────────────
     if (isCentered || this._config.icon_position === 'top') {
       wrapper.appendChild(icon);
       wrapper.appendChild(content);
@@ -238,7 +247,8 @@ class FensterkarteCard extends HTMLElement {
       wrapper.appendChild(icon);
     }
 
-    root.appendChild(wrapper);
+    borderEl.appendChild(wrapper);
+    root.appendChild(borderEl);
     this._renderRoot(root);
   }
 
@@ -247,26 +257,29 @@ class FensterkarteCard extends HTMLElement {
     const style = document.createElement('style');
     style.textContent = `
       :host { display: block; height: 100%; }
-      .fensterkarte-root {
-        font-family: var(--ha-card-font-family, inherit);
-        color: var(--primary-text-color, #000);
-        height: 100%;
-      }
-      .fensterkarte-wrapper { height: 100%; box-sizing: border-box; }
+      .fensterkarte-root { height: 100%; font-family: var(--ha-card-font-family, inherit); color: var(--primary-text-color, #000); }
+      .fensterkarte-border { height: 100%; }
+      .fensterkarte-wrapper { height: 100%; }
       ha-icon { color: var(--paper-item-icon-color, #3F51B5); }
       @keyframes fensterkarte-pulse {
-        0%, 100% {
-          border-color: var(--fk-border-color);
-          box-shadow: var(--fk-box-shadow-peak, none);
-        }
-        50% { border-color: transparent; box-shadow: none; }
+        0%, 100% { box-shadow: var(--fk-box-shadow-peak, none); }
+        50% { box-shadow: none; }
       }
-      .fensterkarte-pulse {
-        animation: fensterkarte-pulse var(--fk-pulse-duration, 1.5s) ease-in-out infinite;
-      }
+      .fensterkarte-pulse { animation: fensterkarte-pulse var(--fk-pulse-duration, 1.5s) ease-in-out infinite; }
     `;
     this.shadowRoot.appendChild(style);
     this.shadowRoot.appendChild(child);
+  }
+
+  _buildGradient(colors) {
+    if (!colors || colors.length === 0) return 'transparent';
+    if (colors.length === 1) return colors[0];
+    const deg = 360 / colors.length;
+    const stops = colors.flatMap((c, i) => [
+      `${c} ${(i * deg).toFixed(1)}deg`,
+      `${c} ${((i + 1) * deg).toFixed(1)}deg`,
+    ]);
+    return `conic-gradient(from 0deg, ${stops.join(', ')})`;
   }
 
   _handleTap() {
@@ -274,14 +287,11 @@ class FensterkarteCard extends HTMLElement {
     switch (action.action) {
       case 'more-info':
         this.dispatchEvent(new CustomEvent('hass-more-info', {
-          detail: { entityId: this._config.entity },
-          bubbles: true, composed: true,
+          detail: { entityId: this._config.entity }, bubbles: true, composed: true,
         }));
         break;
       case 'toggle':
-        this._hass.callService('homeassistant', 'toggle', {
-          entity_id: this._config.entity,
-        });
+        this._hass.callService('homeassistant', 'toggle', { entity_id: this._config.entity });
         break;
       case 'navigate':
         if (action.navigation_path) {
@@ -290,16 +300,13 @@ class FensterkarteCard extends HTMLElement {
         }
         break;
       case 'url':
-        if (action.url_path) {
+        if (action.url_path)
           window.open(action.url_path, action.url_path.startsWith('http') ? '_blank' : '_self');
-        }
         break;
       case 'call-service':
         if (action.service) {
-          const [domain, svc] = action.service.split('.');
-          this._hass.callService(domain, svc, action.service_data || {
-            entity_id: this._config.entity,
-          });
+          const [d, s] = action.service.split('.');
+          this._hass.callService(d, s, action.service_data || { entity_id: this._config.entity });
         }
         break;
     }
@@ -325,21 +332,17 @@ class FensterkarteCard extends HTMLElement {
     return this._config.name_position === 'top' ? 'column' : 'row';
   }
 
-  // Accepts both [r,g,b] arrays and named/hex strings
   _colorToRgb(color) {
     if (Array.isArray(color) && color.length === 3) return color;
     const named = {
-      green: [0,128,0], yellow: [255,255,0], orange: [255,165,0],
-      red: [255,0,0], blue: [0,0,255], purple: [128,0,128],
-      brown: [165,42,42], black: [0,0,0], white: [255,255,255],
+      green:[0,128,0], yellow:[255,255,0], orange:[255,165,0], red:[255,0,0],
+      blue:[0,0,255], purple:[128,0,128], brown:[165,42,42], black:[0,0,0], white:[255,255,255],
     };
     if (named[color]) return named[color];
     if (typeof color === 'string' && color.startsWith('#')) {
       const hex = color.slice(1);
-      if (hex.length === 3)
-        return [parseInt(hex[0]+hex[0],16), parseInt(hex[1]+hex[1],16), parseInt(hex[2]+hex[2],16)];
-      if (hex.length === 6)
-        return [parseInt(hex.slice(0,2),16), parseInt(hex.slice(2,4),16), parseInt(hex.slice(4,6),16)];
+      if (hex.length === 3) return [parseInt(hex[0]+hex[0],16),parseInt(hex[1]+hex[1],16),parseInt(hex[2]+hex[2],16)];
+      if (hex.length === 6) return [parseInt(hex.slice(0,2),16),parseInt(hex.slice(2,4),16),parseInt(hex.slice(4,6),16)];
     }
     return null;
   }
@@ -366,17 +369,16 @@ class FensterkarteCard extends HTMLElement {
     if (typeof value === 'number') return value;
     const s = String(value).trim();
     if (s.includes(':')) {
-      const p = s.split(':').map(n => parseInt(n, 10) || 0);
-      if (p.length === 3) return p[0] * 3600 + p[1] * 60 + p[2];
-      if (p.length === 2) return p[0] * 60 + p[1];
+      const p = s.split(':').map(n => parseInt(n,10) || 0);
+      if (p.length === 3) return p[0]*3600 + p[1]*60 + p[2];
+      if (p.length === 2) return p[0]*60 + p[1];
     }
-    return parseInt(s, 10) || 0;
+    return parseInt(s,10) || 0;
   }
 
   _buildDurationInfo(entity, isOpen) {
     const info = { label: '', active: false };
     if (!this._config.duration_enabled || !isOpen) return info;
-
     let duration = 0;
     if (this._config.duration_entity) {
       const ds = this._hass.states[this._config.duration_entity];
@@ -384,12 +386,10 @@ class FensterkarteCard extends HTMLElement {
     }
     if (!duration && entity?.last_changed)
       duration = Math.floor((new Date() - new Date(entity.last_changed)) / 1000);
-
     const threshold = this._parseThreshold(this._config.duration_threshold);
     info.label = `Offen seit ${this._formatDuration(duration)}`;
     info.active = threshold > 0 && duration >= threshold && this._isTemperatureConditionMet();
     if (info.active) info.label += ' (Warnung)';
-    info.duration = duration;
     return info;
   }
 
@@ -398,8 +398,8 @@ class FensterkarteCard extends HTMLElement {
     const ts = this._hass.states[this._config.temperature_entity];
     if (!ts || isNaN(Number(ts.state))) return true;
     let temp = Number(ts.state);
-    const threshold = Number(this._config.temperature_threshold);
     if (this._config.temperature_unit === 'fahrenheit') temp = temp * 9 / 5 + 32;
+    const threshold = Number(this._config.temperature_threshold);
     return this._config.temperature_threshold_mode === 'above' ? temp >= threshold : temp <= threshold;
   }
 
@@ -423,52 +423,35 @@ class FensterkarteCard extends HTMLElement {
     const baseOpacity = Number(this._config.border_opacity) || 1;
     const blur = Number(this._config.border_blur) || 0;
     const pulse = !!this._config.pulse_enabled;
+    const preview = this._config.preview_warning;
 
-    if (this._config.preview_warning) {
-      const col = this._config.humidity_warning_enabled
-        ? this._applyOpacity(this._config.humidity_border_color || [220,50,50],
-            Number(this._config.humidity_border_opacity) || baseOpacity)
-        : this._applyOpacity(this._config.duration_border_color || [255,140,0],
-            Number(this._config.duration_border_opacity) || baseOpacity);
-      return { color: col, pulse, blur };
-    }
+    const durationActive = durationInfo.active || preview === 'duration' || preview === 'both';
+    const humidityActive = humidityInfo.active || preview === 'humidity' || preview === 'both';
 
-    if (humidityInfo.active && durationInfo.active) {
-      const mixed = this._mixColors(
-        this._config.humidity_border_color || [220,50,50],
-        this._config.duration_border_color || [255,140,0]
-      );
-      const op = ((Number(this._config.humidity_border_opacity) || 1) +
-                  (Number(this._config.duration_border_opacity) || 1)) / 2;
-      return { color: this._applyOpacity(mixed, op), pulse, blur };
-    }
-    if (humidityInfo.active) return {
-      color: this._applyOpacity(this._config.humidity_border_color || [220,50,50],
-        Number(this._config.humidity_border_opacity) || baseOpacity),
-      pulse, blur,
-    };
-    if (durationInfo.active) return {
-      color: this._applyOpacity(this._config.duration_border_color || [255,140,0],
-        Number(this._config.duration_border_opacity) || baseOpacity),
-      pulse, blur,
-    };
+    const colors = [];
+    if (humidityActive) colors.push(this._applyOpacity(
+      this._config.humidity_border_color || [220,50,50],
+      Number(this._config.humidity_border_opacity) || 1
+    ));
+    if (durationActive) colors.push(this._applyOpacity(
+      this._config.duration_border_color || [255,140,0],
+      Number(this._config.duration_border_opacity) || 1
+    ));
+
+    if (colors.length > 0) return { colors, pulse, blur };
 
     if (!isOpen && this._config.border_closed_enabled === false)
-      return { color: 'transparent', pulse: false, blur: 0 };
+      return { colors: ['transparent'], pulse: false, blur: 0 };
 
-    // Separate open/closed color
-    let baseColor;
-    if (isOpen) {
-      baseColor = this._config.border_color_open || this._config.border_color || [0,128,0];
-    } else {
-      baseColor = this._config.border_color || [0,128,0];
-    }
+    let baseColor = isOpen
+      ? (this._config.border_color_open || this._config.border_color || [0,128,0])
+      : (this._config.border_color || [0,128,0]);
 
     if (this._config.border_color_entity) {
       const be = this._hass.states[this._config.border_color_entity];
       if (be?.state) baseColor = be.state;
     }
-    return { color: this._applyOpacity(baseColor, baseOpacity), pulse: false, blur };
+    return { colors: [this._applyOpacity(baseColor, baseOpacity)], pulse: false, blur };
   }
 
   _formatDuration(seconds) {
@@ -491,22 +474,22 @@ class FensterkarteCardEditor extends HTMLElement {
     this._config = {};
     this._hass = null;
     this._cardType = null;
-    this._form = null;
+    this._forms = [];
     this.attachShadow({ mode: 'open' });
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._form && this._hass) this._render();
+    if (this._forms.length === 0 && this._hass) this._render();
   }
 
   set config(config) {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...config };
-    if (this._form) {
-      this._form.schema = this._getSchema(this._config);
-      this._form.data = this._getFormData();
+    if (this._forms.length > 0) {
+      const data = this._getFormData();
+      for (const { form } of this._forms) form.data = data;
     } else if (this._hass) {
       this._render();
     }
@@ -519,137 +502,194 @@ class FensterkarteCardEditor extends HTMLElement {
     return rest;
   }
 
-  // Flatten any section-nested data from ha-form-expandable
-  _flatten(value, schema) {
-    const result = {};
-    for (const [k, v] of Object.entries(value)) {
-      const isSection = schema.some(s => s.type === 'expandable' && s.name === k);
-      if (isSection && v && typeof v === 'object' && !Array.isArray(v)) {
-        Object.assign(result, v);
-      } else {
-        result[k] = v;
-      }
-    }
-    return result;
-  }
-
   _render() {
     if (!this.shadowRoot || !this._hass) return;
-    this.shadowRoot.innerHTML = `<style>div{padding:8px 16px}</style><div></div>`;
-    const form = document.createElement('ha-form');
-    form.hass = this._hass;
-    form.data = this._getFormData();
-    form.schema = this._getSchema(this._config);
+    this._forms = [];
 
-    form.addEventListener('value-changed', (e) => {
-      const { type, ...stored } = this._config;
-      const cardType = type || this._cardType || 'custom:fensterkarte-card';
-      const flat = this._flatten(e.detail.value, form.schema);
-      const newConfig = {
-        type: cardType,
-        ...FensterkarteCard.getStubConfig(),
-        ...stored,
-        ...flat,
-      };
-      this._config = { ...newConfig };
-      form.schema = this._getSchema(newConfig);
-      this.dispatchEvent(new CustomEvent('config-changed', {
-        detail: { config: newConfig }, bubbles: true, composed: true,
-      }));
-    });
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: block; }
+        details { border-bottom: 1px solid var(--divider-color, #e0e0e0); }
+        summary {
+          padding: 14px 16px; font-weight: 500; cursor: pointer; user-select: none;
+          display: flex; align-items: center; justify-content: space-between;
+          color: var(--primary-text-color); list-style: none;
+        }
+        summary::-webkit-details-marker { display: none; }
+        summary::after { content: '▾'; font-size: 16px; color: var(--secondary-text-color); }
+        details[open] summary::after { content: '▴'; }
+        .section-form { padding: 0 4px 8px; }
+        .test-row { padding: 2px 16px 10px; display: flex; gap: 8px; flex-wrap: wrap; }
+        .test-btn {
+          font-size: 12px; padding: 4px 12px; border-radius: 12px;
+          border: 1px solid var(--primary-color, #3F51B5);
+          background: transparent; color: var(--primary-color, #3F51B5);
+          cursor: pointer; font-family: inherit;
+        }
+        .test-btn.active { background: var(--primary-color, #3F51B5); color: white; }
+      </style>
+    `;
 
-    this.shadowRoot.querySelector('div').appendChild(form);
-    this._form = form;
-  }
-
-  _getSchema(cfg = {}) {
+    const cfg = this._config;
+    const data = this._getFormData();
     const sl = (min, max, step) => ({ number: { min, max, step, mode: 'slider' } });
     const positions = [
-      { value: 'left', label: 'Links' },
-      { value: 'center', label: 'Mitte' },
-      { value: 'right', label: 'Rechts' },
-      { value: 'top', label: 'Oben' },
+      { value: 'left', label: 'Links' }, { value: 'center', label: 'Mitte' },
+      { value: 'right', label: 'Rechts' }, { value: 'top', label: 'Oben' },
       { value: 'bottom', label: 'Unten' },
     ];
 
-    const sec = (name, title, schema) => ({ type: 'expandable', name, title, schema });
+    // ── Section: Darstellung ───────────────────────────────────────────
+    this._addSection('Darstellung', [
+      { name: 'entity', label: 'Entität', required: true, selector: { entity: {} } },
+      { name: 'name', label: 'Anzeigename', selector: { text: {} } },
+      { name: 'card_height', label: 'Kartenhöhe px (0 = auto)', selector: sl(0, 400, 4) },
+      { name: 'show_icon', label: 'Icon anzeigen', selector: { boolean: {} } },
+      { name: 'icon_position', label: 'Icon Position', selector: { select: { options: positions } } },
+      { name: 'icon_size', label: 'Icon Größe (px)', selector: sl(16, 128, 2) },
+      { name: 'open_icon', label: 'Icon geöffnet', selector: { icon: {} } },
+      { name: 'closed_icon', label: 'Icon geschlossen', selector: { icon: {} } },
+      { name: 'icon_color_open', label: 'Icon Farbe geöffnet', selector: { color_rgb: {} } },
+      { name: 'icon_color_closed', label: 'Icon Farbe geschlossen', selector: { color_rgb: {} } },
+      { name: 'show_name', label: 'Name anzeigen', selector: { boolean: {} } },
+      { name: 'name_position', label: 'Name Position', selector: { select: { options: positions } } },
+      { name: 'name_size', label: 'Schriftgröße (px)', selector: sl(10, 48, 1) },
+      { name: 'show_state', label: 'Status anzeigen', selector: { boolean: {} } },
+      { name: 'tap_action', label: 'Aktion beim Tippen', selector: { action: {} } },
+    ], { open: true });
 
-    const durationSub = cfg.duration_enabled ? [
-      { name: 'duration_threshold', label: 'Schwelle (HH:MM:SS)', selector: { text: {} } },
-      { name: 'duration_entity', label: 'Dauer-Entität (optional)', selector: { entity: {} } },
-      { name: 'duration_border_color', label: 'Randfarbe Dauerwarnung', selector: { color_rgb: {} } },
-      { name: 'duration_border_opacity', label: 'Deckkraft Dauerwarnung', selector: sl(0, 1, 0.05) },
-      { name: 'temperature_warning_enabled', label: 'Nur bei bestimmter Temperatur warnen', selector: { boolean: {} } },
-      ...(cfg.temperature_warning_enabled ? [
-        { name: 'temperature_entity', label: 'Temperatur-Entität', selector: { entity: {} } },
-        { name: 'temperature_unit', label: 'Einheit', selector: { select: { options: [
-          { value: 'celsius', label: '°C' }, { value: 'fahrenheit', label: '°F' },
-        ] } } },
-        { name: 'temperature_threshold',
-          label: `Schwelle (${cfg.temperature_unit === 'fahrenheit' ? '°F' : '°C'})`,
-          selector: { number: {
-            min: cfg.temperature_unit === 'fahrenheit' ? -58 : -50,
-            max: cfg.temperature_unit === 'fahrenheit' ? 122 : 50,
-            step: 0.5, mode: 'box',
-          } },
-        },
-        { name: 'temperature_threshold_mode', label: 'Bedingung', selector: { select: { options: [
-          { value: 'below', label: 'Unter dem Schwellenwert' },
-          { value: 'above', label: 'Über dem Schwellenwert' },
-        ] } } },
-      ] : []),
-    ] : [];
-
-    const humiditySub = cfg.humidity_warning_enabled ? [
-      { name: 'humidity_entity', label: 'Feuchtigkeits-Entität', selector: { entity: {} } },
-      { name: 'humidity_warning_threshold', label: 'Schwelle (%)', selector: sl(0, 100, 1) },
-      { name: 'humidity_border_color', label: 'Randfarbe', selector: { color_rgb: {} } },
-      { name: 'humidity_border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) },
-    ] : [];
-
-    return [
-      sec('darstellung', 'Darstellung', [
-        { name: 'entity', label: 'Entität', required: true, selector: { entity: {} } },
-        { name: 'name', label: 'Anzeigename', selector: { text: {} } },
-        { name: 'card_height', label: 'Kartenhöhe px (0 = auto)', selector: sl(0, 400, 4) },
-        { name: 'show_icon', label: 'Icon anzeigen', selector: { boolean: {} } },
-        { name: 'icon_position', label: 'Icon Position', selector: { select: { options: positions } } },
-        { name: 'icon_size', label: 'Icon Größe (px)', selector: sl(16, 128, 2) },
-        { name: 'open_icon', label: 'Icon geöffnet', selector: { icon: {} } },
-        { name: 'closed_icon', label: 'Icon geschlossen', selector: { icon: {} } },
-        { name: 'icon_color_open', label: 'Icon Farbe geöffnet', selector: { color_rgb: {} } },
-        { name: 'icon_color_closed', label: 'Icon Farbe geschlossen', selector: { color_rgb: {} } },
-        { name: 'show_name', label: 'Name anzeigen', selector: { boolean: {} } },
-        { name: 'name_position', label: 'Name Position', selector: { select: { options: positions } } },
-        { name: 'name_size', label: 'Schriftgröße (px)', selector: sl(10, 48, 1) },
-        { name: 'show_state', label: 'Status anzeigen', selector: { boolean: {} } },
-        { name: 'tap_action', label: 'Aktion beim Tippen', selector: { action: {} } },
-      ]),
-
-      sec('rand', 'Rand & Farbe', [
-        { name: 'border_color', label: 'Randfarbe (geschlossen)', selector: { color_rgb: {} } },
-        { name: 'border_color_open', label: 'Randfarbe (geöffnet, keine Warnung)', selector: { color_rgb: {} } },
-        { name: 'border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) },
-        { name: 'border_blur', label: 'Unschärfe / Glow (px)', selector: sl(0, 30, 1) },
-        { name: 'border_closed_enabled', label: 'Rand bei geschlossenem Fenster anzeigen', selector: { boolean: {} } },
-        { name: 'border_color_entity', label: 'Farbe über Entität', selector: { entity: {} } },
-        { name: 'preview_warning', label: 'Warnung testen (Vorschau aktiv)', selector: { boolean: {} } },
-        { name: 'pulse_enabled', label: 'Rand pulsieren bei Warnung', selector: { boolean: {} } },
-        ...(cfg.pulse_enabled ? [
-          { name: 'pulse_interval', label: 'Puls-Intervall (Sekunden)', selector: sl(0.3, 5, 0.1) },
-        ] : []),
-      ]),
-
-      sec('dauer', 'Öffnungsdauer-Warnung', [
-        { name: 'duration_enabled', label: 'Aktiviert', selector: { boolean: {} } },
-        ...durationSub,
-      ]),
-
-      sec('feuchtigkeit', 'Feuchtigkeitswarnung', [
-        { name: 'humidity_warning_enabled', label: 'Aktiviert', selector: { boolean: {} } },
-        ...humiditySub,
-      ]),
+    // ── Section: Rand & Farbe ──────────────────────────────────────────
+    const randSchema = [
+      { name: 'border_color', label: 'Randfarbe (geschlossen)', selector: { color_rgb: {} } },
+      { name: 'border_color_open', label: 'Randfarbe (geöffnet, keine Warnung)', selector: { color_rgb: {} } },
+      { name: 'border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) },
+      { name: 'border_blur', label: 'Unschärfe / Glow (px)', selector: sl(0, 30, 1) },
+      { name: 'border_closed_enabled', label: 'Rand bei geschlossenem Fenster', selector: { boolean: {} } },
+      { name: 'border_color_entity', label: 'Randfarbe über Entität', selector: { entity: {} } },
+      { name: 'pulse_enabled', label: 'Rand pulsieren bei Warnung', selector: { boolean: {} } },
     ];
+    if (cfg.pulse_enabled) {
+      randSchema.push({ name: 'pulse_interval', label: 'Puls-Intervall (Sekunden)', selector: sl(0.3, 5, 0.1) });
+    }
+    this._addSection('Rand & Farbe', randSchema);
+
+    // ── Section: Öffnungsdauer-Warnung ─────────────────────────────────
+    const dauerSchema = [
+      { name: 'duration_enabled', label: 'Aktiviert', selector: { boolean: {} } },
+    ];
+    if (cfg.duration_enabled) {
+      dauerSchema.push(
+        { name: 'duration_threshold', label: 'Warnschwelle (HH:MM:SS)', selector: { text: {} } },
+        { name: 'duration_entity', label: 'Dauer-Entität (optional)', selector: { entity: {} } },
+        { name: 'duration_border_color', label: 'Randfarbe', selector: { color_rgb: {} } },
+        { name: 'duration_border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) },
+        { name: 'temperature_warning_enabled', label: 'Nur bei bestimmter Temperatur', selector: { boolean: {} } }
+      );
+      if (cfg.temperature_warning_enabled) {
+        dauerSchema.push(
+          { name: 'temperature_entity', label: 'Temperatur-Entität', selector: { entity: {} } },
+          { name: 'temperature_unit', label: 'Einheit', selector: { select: { options: [
+            { value: 'celsius', label: '°C' }, { value: 'fahrenheit', label: '°F' }
+          ] } } },
+          { name: 'temperature_threshold',
+            label: `Schwelle (${cfg.temperature_unit === 'fahrenheit' ? '°F' : '°C'})`,
+            selector: { number: {
+              min: cfg.temperature_unit === 'fahrenheit' ? -58 : -50,
+              max: cfg.temperature_unit === 'fahrenheit' ? 122 : 50,
+              step: 0.5, mode: 'box',
+            } } },
+          { name: 'temperature_threshold_mode', label: 'Bedingung', selector: { select: { options: [
+            { value: 'below', label: 'Unter dem Schwellenwert' },
+            { value: 'above', label: 'Über dem Schwellenwert' },
+          ] } } }
+        );
+      }
+    }
+    this._addSection('Öffnungsdauer-Warnung', dauerSchema, { testWarning: 'duration' });
+
+    // ── Section: Feuchtigkeitswarnung ──────────────────────────────────
+    const feuchSchema = [
+      { name: 'humidity_warning_enabled', label: 'Aktiviert', selector: { boolean: {} } },
+    ];
+    if (cfg.humidity_warning_enabled) {
+      feuchSchema.push(
+        { name: 'humidity_entity', label: 'Feuchtigkeits-Entität', selector: { entity: {} } },
+        { name: 'humidity_warning_threshold', label: 'Schwelle (%)', selector: sl(0, 100, 1) },
+        { name: 'humidity_border_color', label: 'Randfarbe', selector: { color_rgb: {} } },
+        { name: 'humidity_border_opacity', label: 'Deckkraft', selector: sl(0, 1, 0.05) }
+      );
+    }
+    this._addSection('Feuchtigkeitswarnung', feuchSchema, { testWarning: 'humidity' });
+  }
+
+  _addSection(title, schema, { open = false, testWarning = null } = {}) {
+    const details = document.createElement('details');
+    if (open) details.open = true;
+
+    const summary = document.createElement('summary');
+    summary.textContent = title;
+    details.appendChild(summary);
+
+    if (testWarning) {
+      const row = document.createElement('div');
+      row.className = 'test-row';
+      const btn = document.createElement('button');
+      btn.className = 'test-btn' + (this._config.preview_warning === testWarning ? ' active' : '');
+      btn.dataset.warning = testWarning;
+      btn.textContent = 'Warnung testen';
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const prev = this._config.preview_warning;
+        const next = prev === testWarning ? false : testWarning;
+        this._applyChange({ preview_warning: next });
+        this.shadowRoot.querySelectorAll('.test-btn').forEach(b => {
+          b.classList.toggle('active', b.dataset.warning === next);
+        });
+      });
+      row.appendChild(btn);
+      details.appendChild(row);
+    }
+
+    const formWrap = document.createElement('div');
+    formWrap.className = 'section-form';
+    const form = document.createElement('ha-form');
+    form.hass = this._hass;
+    form.data = this._getFormData();
+    form.schema = schema;
+
+    form.addEventListener('value-changed', (e) => {
+      this._applyChange(e.detail.value);
+    });
+
+    this._forms.push({ form, title, testWarning });
+    formWrap.appendChild(form);
+    details.appendChild(formWrap);
+    this.shadowRoot.appendChild(details);
+  }
+
+  _applyChange(value) {
+    const { type, ...stored } = this._config;
+    const cardType = type || this._cardType || 'custom:fensterkarte-card';
+    const newConfig = {
+      type: cardType,
+      ...FensterkarteCard.getStubConfig(),
+      ...stored,
+      ...value,
+    };
+    this._config = { ...newConfig };
+
+    // If schema-conditional fields changed, rebuild sections
+    const triggers = ['duration_enabled', 'temperature_warning_enabled', 'humidity_warning_enabled', 'pulse_enabled'];
+    if (triggers.some(k => k in value)) {
+      this._render();
+    } else {
+      const data = this._getFormData();
+      for (const { form } of this._forms) form.data = data;
+    }
+
+    this.dispatchEvent(new CustomEvent('config-changed', {
+      detail: { config: newConfig }, bubbles: true, composed: true,
+    }));
   }
 }
 
