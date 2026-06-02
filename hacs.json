@@ -1,8 +1,12 @@
 {
   "name": "Fensterkarte",
+  "type": "plugin",
+  "content_in_root": true,
+  "filename": "fensterkarte.js",
   "homeassistant": "2024.1.0",
   "documentation": "https://github.com/niklasbraune/fensterkarte",
   "issues": "https://github.com/niklasbraune/fensterkarte/issues",
+  "zip_release": true,
   "country": ["DE"],
   "render_readme": true
 }

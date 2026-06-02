@@ -2,7 +2,8 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: 'fensterkarte-card',
   name: 'Fensterkarte',
-  description: 'Anzeige des Fensterstatus mit konfigurierbaren Rahmen- und Warnfarben.'
+  description: 'Anzeige des Fensterstatus mit konfigurierbaren Rahmen- und Warnfarben.',
+  preview: true
 });
 
 class FensterkarteCard extends HTMLElement {
