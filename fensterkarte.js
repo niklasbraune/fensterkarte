@@ -24,15 +24,17 @@ class FensterkarteCard extends HTMLElement {
       name: '',
       show_icon: true,
       icon_position: 'left',
-      icon_size: 48,
+      icon_size: 36,
       show_name: true,
       name_position: 'right',
-      name_size: 16,
+      name_size: 14,
       show_state: true,
       open_icon: 'mdi:window-open',
       closed_icon: 'mdi:window-closed',
       border_color: 'green',
       border_opacity: 1,
+      border_blur: 4,
+      border_closed_enabled: true,
       duration_enabled: false,
       duration_threshold: 600,
       duration_entity: '',
@@ -100,8 +102,14 @@ class FensterkarteCard extends HTMLElement {
     wrapper.style.border = `2px solid ${border.color}`;
     wrapper.style.borderRadius = '14px';
     wrapper.style.background = 'var(--card-background-color, rgba(255,255,255,0.9))';
-    wrapper.style.boxShadow = 'var(--ha-card-box-shadow, none)';
     wrapper.style.padding = '14px';
+
+    const blurPx = border.blur;
+    if (blurPx > 0 && border.color !== 'transparent') {
+      wrapper.style.boxShadow = `0 0 ${blurPx}px ${Math.ceil(blurPx / 2)}px ${border.color}`;
+    } else {
+      wrapper.style.boxShadow = 'var(--ha-card-box-shadow, none)';
+    }
     wrapper.style.display = 'flex';
     wrapper.style.alignItems = 'center';
     wrapper.style.gap = '12px';
@@ -338,6 +346,7 @@ class FensterkarteCard extends HTMLElement {
 
   _computeBorder(isOpen, durationInfo, humidityInfo) {
     const baseOpacity = Number(this._config.border_opacity) || 1;
+    const blur = Number(this._config.border_blur) || 0;
     const humidityActive = humidityInfo.active;
     const durationActive = durationInfo.active;
 
@@ -351,6 +360,7 @@ class FensterkarteCard extends HTMLElement {
       return {
         color: this._applyOpacity(this._mixColors(humColor, durColor), mixedOpacity),
         pulse: !!this._config.pulse_enabled,
+        blur,
       };
     }
 
@@ -361,6 +371,7 @@ class FensterkarteCard extends HTMLElement {
           Number(this._config.humidity_border_opacity) || baseOpacity
         ),
         pulse: !!this._config.pulse_enabled,
+        blur,
       };
     }
 
@@ -371,7 +382,13 @@ class FensterkarteCard extends HTMLElement {
           Number(this._config.duration_border_opacity) || baseOpacity
         ),
         pulse: !!this._config.pulse_enabled,
+        blur,
       };
+    }
+
+    // No active warning — check if border should be hidden when closed
+    if (!isOpen && this._config.border_closed_enabled === false) {
+      return { color: 'transparent', pulse: false, blur: 0 };
     }
 
     let baseColor = this._config.border_color || 'var(--divider-color, #a0a0a0)';
@@ -381,7 +398,7 @@ class FensterkarteCard extends HTMLElement {
         baseColor = borderEntity.state;
       }
     }
-    return { color: this._applyOpacity(baseColor, baseOpacity), pulse: false };
+    return { color: this._applyOpacity(baseColor, baseOpacity), pulse: false, blur };
   }
 
   _formatDuration(seconds) {
@@ -495,48 +512,46 @@ class FensterkarteCardEditor extends HTMLElement {
       { value: 'black', label: 'Schwarz' },
       { value: 'white', label: 'Weiß' },
     ];
+    const positionOptions = [
+      { value: 'left', label: 'Links' },
+      { value: 'right', label: 'Rechts' },
+      { value: 'top', label: 'Oben' },
+      { value: 'bottom', label: 'Unten' },
+    ];
 
     const schema = [
-      { name: 'entity', required: true, selector: { entity: {} } },
-      { name: 'name', selector: { text: {} } },
-      { name: 'show_icon', selector: { boolean: {} } },
-      { name: 'icon_position', selector: { select: { options: [
-        { value: 'left', label: 'Links' },
-        { value: 'right', label: 'Rechts' },
-        { value: 'top', label: 'Oben' },
-        { value: 'bottom', label: 'Unten' },
-      ] } } },
-      { name: 'icon_size', selector: { number: { min: 16, max: 120, step: 1 } } },
-      { name: 'show_name', selector: { boolean: {} } },
-      { name: 'name_position', selector: { select: { options: [
-        { value: 'left', label: 'Links' },
-        { value: 'right', label: 'Rechts' },
-        { value: 'top', label: 'Oben' },
-        { value: 'bottom', label: 'Unten' },
-      ] } } },
-      { name: 'name_size', selector: { number: { min: 10, max: 48, step: 1 } } },
-      { name: 'show_state', selector: { boolean: {} } },
-      { name: 'open_icon', selector: { icon: {} } },
-      { name: 'closed_icon', selector: { icon: {} } },
-      { name: 'border_color', selector: { select: { options: colorOptions } } },
-      { name: 'border_opacity', selector: { number: { min: 0, max: 1, step: 0.05 } } },
-      { name: 'border_color_entity', selector: { entity: {} } },
-      { name: 'duration_enabled', selector: { boolean: {} } },
+      { name: 'entity', label: 'Entität', required: true, selector: { entity: {} } },
+      { name: 'name', label: 'Anzeigename', selector: { text: {} } },
+      { name: 'show_icon', label: 'Icon anzeigen', selector: { boolean: {} } },
+      { name: 'icon_position', label: 'Icon Position', selector: { select: { options: positionOptions } } },
+      { name: 'icon_size', label: 'Icon Größe (px)', selector: { number: { min: 16, max: 120, step: 2, mode: 'slider' } } },
+      { name: 'open_icon', label: 'Icon geöffnet', selector: { icon: {} } },
+      { name: 'closed_icon', label: 'Icon geschlossen', selector: { icon: {} } },
+      { name: 'show_name', label: 'Name anzeigen', selector: { boolean: {} } },
+      { name: 'name_position', label: 'Name Position', selector: { select: { options: positionOptions } } },
+      { name: 'name_size', label: 'Schriftgröße (px)', selector: { number: { min: 10, max: 48, step: 1, mode: 'slider' } } },
+      { name: 'show_state', label: 'Status anzeigen', selector: { boolean: {} } },
+      { name: 'border_color', label: 'Randfarbe', selector: { select: { options: colorOptions } } },
+      { name: 'border_opacity', label: 'Rand Deckkraft', selector: { number: { min: 0, max: 1, step: 0.05, mode: 'slider' } } },
+      { name: 'border_blur', label: 'Rand Unschärfe (px)', selector: { number: { min: 0, max: 30, step: 1, mode: 'slider' } } },
+      { name: 'border_closed_enabled', label: 'Rand bei geschlossenem Zustand anzeigen', selector: { boolean: {} } },
+      { name: 'border_color_entity', label: 'Randfarbe über Entität', selector: { entity: {} } },
+      { name: 'duration_enabled', label: 'Öffnungsdauer-Warnung aktiv', selector: { boolean: {} } },
     ];
 
     if (config.duration_enabled) {
       schema.push(
-        { name: 'duration_threshold', selector: { number: { min: 0, max: 86400, step: 60 } } },
-        { name: 'duration_entity', selector: { entity: {} } },
-        { name: 'duration_border_color', selector: { select: { options: colorOptions } } },
-        { name: 'duration_border_opacity', selector: { number: { min: 0, max: 1, step: 0.05 } } },
-        { name: 'temperature_warning_enabled', selector: { boolean: {} } }
+        { name: 'duration_threshold', label: 'Warnschwelle (Sekunden)', selector: { number: { min: 0, max: 86400, step: 60, mode: 'box' } } },
+        { name: 'duration_entity', label: 'Dauer-Entität (optional)', selector: { entity: {} } },
+        { name: 'duration_border_color', label: 'Randfarbe Dauerwarnung', selector: { select: { options: colorOptions } } },
+        { name: 'duration_border_opacity', label: 'Deckkraft Dauerwarnung', selector: { number: { min: 0, max: 1, step: 0.05, mode: 'slider' } } },
+        { name: 'temperature_warning_enabled', label: 'Nur bei Temperatur warnen', selector: { boolean: {} } }
       );
       if (config.temperature_warning_enabled) {
         schema.push(
-          { name: 'temperature_entity', selector: { entity: {} } },
-          { name: 'temperature_threshold', selector: { number: { min: -50, max: 50, step: 0.5 } } },
-          { name: 'temperature_threshold_mode', selector: { select: { options: [
+          { name: 'temperature_entity', label: 'Temperatur-Entität', selector: { entity: {} } },
+          { name: 'temperature_threshold', label: 'Temperaturschwelle (°C)', selector: { number: { min: -50, max: 50, step: 0.5, mode: 'box' } } },
+          { name: 'temperature_threshold_mode', label: 'Bedingung', selector: { select: { options: [
             { value: 'below', label: 'Unter dem Schwellenwert' },
             { value: 'above', label: 'Über dem Schwellenwert' },
           ] } } }
@@ -544,18 +559,18 @@ class FensterkarteCardEditor extends HTMLElement {
       }
     }
 
-    schema.push({ name: 'humidity_warning_enabled', selector: { boolean: {} } });
+    schema.push({ name: 'humidity_warning_enabled', label: 'Feuchtigkeitswarnung aktiv', selector: { boolean: {} } });
 
     if (config.humidity_warning_enabled) {
       schema.push(
-        { name: 'humidity_entity', selector: { entity: {} } },
-        { name: 'humidity_warning_threshold', selector: { number: { min: 0, max: 100, step: 1 } } },
-        { name: 'humidity_border_color', selector: { select: { options: colorOptions } } },
-        { name: 'humidity_border_opacity', selector: { number: { min: 0, max: 1, step: 0.05 } } }
+        { name: 'humidity_entity', label: 'Feuchtigkeits-Entität', selector: { entity: {} } },
+        { name: 'humidity_warning_threshold', label: 'Schwellenwert (%)', selector: { number: { min: 0, max: 100, step: 1, mode: 'slider' } } },
+        { name: 'humidity_border_color', label: 'Randfarbe Feuchtigkeitswarnung', selector: { select: { options: colorOptions } } },
+        { name: 'humidity_border_opacity', label: 'Deckkraft Feuchtigkeitswarnung', selector: { number: { min: 0, max: 1, step: 0.05, mode: 'slider' } } }
       );
     }
 
-    schema.push({ name: 'pulse_enabled', selector: { boolean: {} } });
+    schema.push({ name: 'pulse_enabled', label: 'Rand pulsieren bei Warnung', selector: { boolean: {} } });
 
     return schema;
   }
