@@ -526,6 +526,7 @@ class FensterkarteCardEditor extends HTMLElement {
     this._cardType = null;
     this._forms = [];
     this._configReceived = false;
+    this._pendingEchos = 0; // counts dispatched config-changed events not yet echoed back
     this.attachShadow({ mode: 'open' });
   }
 
@@ -541,14 +542,14 @@ class FensterkarteCardEditor extends HTMLElement {
     }
   }
 
-  // HA calls setConfig() for both initial load AND echoes (since the method now exists).
-  // Must also suppress echoes to prevent re-renders while the user is typing.
+  // HA calls setConfig() for both initial load AND echoes.
+  // Echoes are identified by _pendingEchos > 0 and skipped to preserve focus.
   setConfig(config) {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...FensterkarteCard.getStubConfig(), ...config };
     this._configReceived = true;
-    if (this._suppressConfigUpdate) return;
+    if (this._pendingEchos > 0) { this._pendingEchos--; return; }
     if (!this._hass) return;
     const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
     this._render(open);
@@ -559,7 +560,7 @@ class FensterkarteCardEditor extends HTMLElement {
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...FensterkarteCard.getStubConfig(), ...config };
     this._configReceived = true;
-    if (this._suppressConfigUpdate) return;
+    if (this._pendingEchos > 0) { this._pendingEchos--; return; }
     if (!this._hass) return;
     const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
     this._render(open);
@@ -662,7 +663,6 @@ class FensterkarteCardEditor extends HTMLElement {
       { name: 'name_position', label: 'Name Position', selector: { select: { options: positions } } },
       { name: 'name_size', label: 'Schriftgröße (px)', selector: sl(10, 48, 1) },
       { name: 'show_state', label: 'Status anzeigen', selector: { boolean: {} } },
-      { name: 'tap_action', label: 'Aktion beim Tippen', selector: { action: {} } },
       { name: 'border_radius', label: 'Eckenradius (px)', selector: sl(0, 20, 1) },
     ]);
 
@@ -814,12 +814,15 @@ class FensterkarteCardEditor extends HTMLElement {
       }
     }
 
-    // Suppress the set config echo HA sends back after config-changed
-    this._suppressConfigUpdate = true;
+    // Track this dispatch so the echo (setConfig/set config) can be skipped.
+    // _pendingEchos is decremented when the echo arrives — no timing dependency.
+    // Safety timeout resets counter if HA never echoes (rare edge case).
+    this._pendingEchos++;
+    clearTimeout(this._echoSafetyTimeout);
+    this._echoSafetyTimeout = setTimeout(() => { this._pendingEchos = 0; }, 3000);
     this.dispatchEvent(new CustomEvent('config-changed', {
       detail: { config: newConfig }, bubbles: true, composed: true,
     }));
-    Promise.resolve().then(() => { this._suppressConfigUpdate = false; });
   }
 }
 
