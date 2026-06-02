@@ -518,19 +518,18 @@ class FensterkarteCardEditor extends HTMLElement {
     this._hass = null;
     this._cardType = null;
     this._forms = [];
+    this._configReceived = false;
     this.attachShadow({ mode: 'open' });
   }
 
   set hass(hass) {
+    const firstHass = !this._hass;
     this._hass = hass;
-    // Update hass on existing forms so entity pickers stay current
+    // Keep entity-pickers in existing forms current
     for (const { form } of this._forms) form.hass = this._hass;
-    // Defer first render so set config can run first — HA sets both synchronously
-    // and Promise.resolve() defers until after both setters have run
-    if (this._forms.length === 0) {
-      Promise.resolve().then(() => {
-        if (this._forms.length === 0 && this._hass) this._render();
-      });
+    // Render only when config has already arrived (covers config-before-hass order)
+    if (firstHass && this._configReceived && this._forms.length === 0) {
+      this._render(new Set(['Darstellung']));
     }
   }
 
@@ -538,9 +537,9 @@ class FensterkarteCardEditor extends HTMLElement {
     if (!config) return;
     if (!this._cardType && config.type) this._cardType = config.type;
     this._config = { ...FensterkarteCard.getStubConfig(), ...config };
-    console.log('[FK editor] set config — entity:', this._config.entity, 'show_icon:', this._config.show_icon, 'suppress:', !!this._suppressConfigUpdate, 'hass:', !!this._hass);
+    this._configReceived = true;
     if (this._suppressConfigUpdate) return;
-    if (!this._hass) return;
+    if (!this._hass) return; // render deferred to set hass
     const open = this._forms.length > 0 ? this._getExpandedPanels() : new Set(['Darstellung']);
     this._render(open);
   }
@@ -575,8 +574,6 @@ class FensterkarteCardEditor extends HTMLElement {
       .panel-content { padding: 0 8px 8px; }
       .test-row { padding: 4px 8px 8px; }
     </style>`;
-
-    console.log('[FK editor] _render — config entity:', this._config.entity, 'show_icon:', this._config.show_icon, 'border_radius:', this._config.border_radius);
 
     const cfg = this._config;
     const sl = (min, max, step) => ({ number: { min, max, step, mode: 'slider' } });
@@ -723,13 +720,6 @@ class FensterkarteCardEditor extends HTMLElement {
     }
     this._addSection('Feuchtigkeitswarnung', open, feuchSchema, 'humidity');
 
-    // Belt-and-suspenders: re-push correct data after ha-form's first Lit render,
-    // in case ha-form normalises / resets values during initialisation.
-    requestAnimationFrame(() => {
-      const data = this._getFormData();
-      console.log('[FK editor] rAF push — show_icon:', data.show_icon, 'entity:', data.entity, 'border_radius:', data.border_radius);
-      for (const { form } of this._forms) form.data = { ...data };
-    });
   }
 
   _addSection(title, openSet, schema, testWarning = null) {
