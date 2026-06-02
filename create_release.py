@@ -1,0 +1,1 @@
+print('cleanup script removed')
