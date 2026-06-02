@@ -1,0 +1,39 @@
+# Beispielkonfiguration für die Fensterkarte in Lovelace
+
+resources:
+  - url: /local/fensterkarte.js
+    type: module
+
+views:
+  - title: Fenster
+    path: fenster
+    cards:
+      - type: custom:fensterkarte-card
+        entity: sensor.fensterkontakt
+        name: Fenster Wohnzimmer
+        show_icon: true
+        icon_position: left
+        icon_size: 56
+        show_name: true
+        name_position: right
+        name_size: 18
+        show_state: true
+        open_icon: mdi:window-open
+        closed_icon: mdi:window-closed
+        border_color: green
+        border_opacity: 0.8
+        border_color_entity: sensor.fenster_status_farbe
+        duration_enabled: true
+        duration_threshold: 600
+        duration_entity: sensor.fenster_offen_sekunden
+        duration_border_color: orange
+        duration_border_opacity: 0.7
+        temperature_warning_enabled: true
+        temperature_entity: sensor.raumtemperatur
+        temperature_threshold: 18
+        temperature_threshold_mode: below
+        humidity_warning_enabled: true
+        humidity_entity: sensor.luftfeuchtigkeit
+        humidity_warning_threshold: 65
+        humidity_border_color: red
+        humidity_border_opacity: 0.7

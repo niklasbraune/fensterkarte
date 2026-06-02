@@ -1,0 +1,17 @@
+{
+  "name": "fensterkarte",
+  "version": "0.1.0",
+  "description": "Home Assistant Lovelace custom card zur Anzeige von Fensterstatus mit konfigurierbaren Warnfarben.",
+  "main": "fensterkarte.js",
+  "scripts": {
+    "build": "echo 'No build step required for this card'"
+  },
+  "keywords": [
+    "home-assistant",
+    "lovelace",
+    "custom-card",
+    "fensterkarte"
+  ],
+  "author": "",
+  "license": "MIT"
+}
